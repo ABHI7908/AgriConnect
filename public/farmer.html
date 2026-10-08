@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>My farm · AgriConnect</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#143d27">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AgriConnect">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header id="site-header"></header>
+  <main class="container" style="padding-top:1.5rem">
+    <div class="row between"><h1 style="font-size:2rem;margin:0" id="greet">My farm</h1><a class="btn" href="/">Find machines &amp; labour</a></div>
+    <div class="grid cols-4" id="stats" style="margin:1.25rem 0"></div>
+    <div class="tabs" id="tabs"></div>
+    <section id="panel-bookings"></section>
+    <section id="panel-history" class="hidden"></section>
+    <section id="panel-saved" class="hidden"></section>
+    <section id="panel-profile" class="hidden"></section>
+  </main>
+  <footer id="site-footer"></footer>
+  <script type="module" src="/js/farmer.js"></script>
+</body>
+</html>

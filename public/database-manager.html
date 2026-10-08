@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Database manager · AgriConnect</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#143d27">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AgriConnect">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .db-auth { width: min(100%, 440px); margin: 4rem auto; }
+    .db-toolbar { margin-block: 1rem; }
+    .db-table-wrap { overflow: auto; border: 1px solid var(--line); background: var(--paper); }
+    .db-table-wrap table { min-width: 100%; border-collapse: collapse; font-size: .92rem; }
+    .db-table-wrap th, .db-table-wrap td { padding: .55rem .7rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; max-width: 280px; overflow-wrap: anywhere; }
+    .db-table-wrap th { position: sticky; top: 0; background: var(--paddy-tint); }
+    .db-table-wrap th:last-child, .db-table-wrap td:last-child { position: sticky; right: 0; z-index: 1; background: var(--paper); }
+    .db-table-wrap th:last-child { background: var(--paddy-tint); z-index: 2; }
+    .db-actions { display: flex; gap: .4rem; white-space: nowrap; }
+    dialog { border: 1px solid var(--line-strong); border-radius: var(--r-md); width: min(94vw, 680px); max-height: 90vh; overflow-y: auto; color: var(--ink); }
+    dialog::backdrop { background: #14281eb3; }
+    .db-edit-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: .8rem; max-height: 60vh; overflow: auto; padding: .25rem; }
+    .db-edit-grid textarea { min-height: 5rem; }
+    .db-footer { display:flex; justify-content:flex-end; gap:.5rem; margin-top:1rem; }
+  </style>
+</head>
+<body>
+  <header class="site-header"><div class="container"><a class="brand" href="/">AgriConnect</a><div class="header-preferences"></div></div></header>
+  <main class="container" style="padding-top:1.5rem">
+    <section id="login-view" class="db-auth plot">
+      <h1 style="font-size:2rem">Database manager sign in</h1>
+      <p class="muted">This is a separate login from the admin dashboard.</p>
+      <form id="login-form">
+        <div class="field"><label for="db-email">Email</label><input id="db-email" name="email" type="email" autocomplete="username" required></div>
+        <div class="field"><label for="db-password">Password</label><input id="db-password" name="password" type="password" autocomplete="current-password" required></div>
+        <p id="login-error" class="form-error hidden" role="alert"></p>
+        <button class="btn block" type="submit">Sign in</button>
+      </form>
+    </section>
+
+    <section id="manager-view" class="hidden">
+      <div class="row between">
+        <div><h1 style="font-size:2rem">Database manager</h1><p class="muted">Manage app records. Authentication secrets and OTP records are not available here.</p></div>
+        <button id="logout" class="btn ghost" type="button">Sign out</button>
+      </div>
+      <div class="row db-toolbar">
+        <label for="table-select">Table</label><select id="table-select"></select>
+        <input id="search" type="search" placeholder="Search this table" aria-label="Search this table">
+        <button id="refresh" class="btn ghost small" type="button">Refresh</button>
+        <a id="export" class="btn dark small" href="#">Export CSV</a>
+      </div>
+      <p id="table-summary" class="muted" aria-live="polite"></p>
+      <p id="manager-error" class="form-error hidden" role="alert"></p>
+      <div id="records"></div>
+      <div id="pager" class="row end" style="margin-top:1rem"></div>
+    </section>
+  </main>
+  <dialog id="edit-dialog">
+    <form id="edit-form">
+      <h2>Edit record <span id="edit-id"></span></h2>
+      <div id="edit-fields" class="db-edit-grid"></div>
+      <p id="edit-error" class="form-error hidden" role="alert"></p>
+      <div class="db-footer">
+        <button class="btn ghost" type="button" id="cancel-edit">Cancel</button>
+        <button class="btn" type="submit">Save changes</button>
+      </div>
+    </form>
+  </dialog>
+  <footer class="site-footer"><div class="container"><span>AgriConnect database manager</span><span>Use exports and edits carefully; deleting accounts may also remove linked records.</span></div></footer>
+  <script type="module" src="/js/database-manager.js"></script>
+</body>
+</html>

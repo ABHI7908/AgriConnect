@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "AgriConnect",
+    "slug": "agriconnect",
+    "scheme": "agriconnect",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.agriconnect.mobile",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "AgriConnect uses your location to find nearby machinery and measure farmland."
+      }
+    },
+    "android": {
+      "package": "com.agriconnect.mobile",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
+    }
+  }
+}

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Crop yield and GPS land calculator · AgriConnect</title>
+  <meta name="description" content="Measure your land with GPS in acres and guntas, then estimate crop yield in bags, quintals and income.">
+  <meta name="theme-color" content="#143d27">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AgriConnect">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header id="site-header"></header>
+  <main class="container" style="padding-top:1.5rem">
+    <h1 style="font-size:2.2rem">Land measure and yield calculator</h1>
+    <p class="muted">Measure your field with your phone's GPS or on the satellite map, then see how many bags to expect. 1 acre = 40 guntas.</p>
+
+    <div class="steps">
+      <section class="plot" aria-labelledby="s1">
+        <div class="step-title"><h2 id="s1">Measure your land <span class="muted small" style="font-weight:400">(optional)</span></h2></div>
+        <div class="segmented" role="group" aria-label="Measuring method" style="margin-bottom:.9rem">
+          <button type="button" data-mm="walk" aria-pressed="true">Walk the boundary (GPS)</button>
+          <button type="button" data-mm="draw" aria-pressed="false">Draw on map</button>
+        </div>
+        <p id="mm-help" class="muted"></p>
+        <div id="gps-bar" class="row" style="margin-bottom:.6rem">
+          <button class="btn dark" type="button" id="btn-gps-start">Start GPS</button>
+          <button class="btn" type="button" id="btn-mark" disabled>Mark corner here</button>
+          <span id="gps-status" class="muted small" aria-live="polite"></span>
+        </div>
+        <div id="map" class="map tall" role="region" aria-label="Land measurement map"></div>
+        <div class="row" style="margin-top:.7rem">
+          <button class="btn ghost small" type="button" id="btn-undo">Undo last point</button>
+          <button class="btn ghost small" type="button" id="btn-clear">Clear</button>
+          <button class="btn ghost small" type="button" id="btn-center">Centre on me</button>
+        </div>
+        <div id="measure-warn" class="form-note hidden" role="alert" style="margin-top:.7rem"></div>
+        <div id="measure-out" class="measure-readout" aria-live="polite"></div>
+        <p id="measure-acc" class="small muted" style="margin:.6rem 0 0"></p>
+        <div class="row" style="margin-top:.8rem"><button class="btn" type="button" id="btn-use-area" disabled>Use this area in the calculator</button></div>
+      </section>
+
+      <section class="plot" aria-labelledby="s2">
+        <div class="step-title"><h2 id="s2">Crop yield</h2></div>
+        <div class="segmented" role="group" aria-label="Calculator mode" style="margin-bottom:1rem">
+          <button type="button" data-cm="estimate" aria-pressed="true">Estimate my harvest</button>
+          <button type="button" data-cm="actual" aria-pressed="false">Check my actual yield</button>
+        </div>
+        <form id="calc-form" novalidate>
+          <div class="form-grid">
+            <div class="field"><label for="c-crop">Crop</label><select id="c-crop"></select></div>
+            <div class="field"><span class="label" style="font-weight:600">Land size</span>
+              <div class="input-group" style="gap:.4rem"><input id="c-area" type="number" min="0" step="any" inputmode="decimal" aria-label="Land size" placeholder="e.g. 2.5">
+                <select id="c-unit" aria-label="Land unit" style="max-width:9rem"><option value="acre">Acres</option><option value="gunta">Guntas</option><option value="hectare">Hectares</option></select></div>
+              <p class="hint" id="c-area-note"></p></div>
+
+            <div class="field" id="est-yield"><span class="label" style="font-weight:600">Expected yield</span>
+              <div class="input-group" style="gap:.4rem"><input id="c-yield" type="number" min="0" step="any" inputmode="decimal" aria-label="Expected yield amount">
+                <select id="c-yunit" aria-label="Yield unit" style="max-width:8rem"><option value="kg">kg</option><option value="quintal">quintal</option><option value="bag">bags</option></select>
+                <select id="c-per" aria-label="Per" style="max-width:8rem"><option value="acre">per acre</option><option value="gunta">per gunta</option></select></div>
+              <p class="hint">Pre-filled with an average for the crop. Change it to match your farm.</p></div>
+            <div class="field hidden" id="act-bags"><label for="c-bags">Bags you harvested</label><input id="c-bags" type="number" min="0" step="any" inputmode="decimal"></div>
+
+            <div class="field"><span class="label" style="font-weight:600">Weight of one bag</span>
+              <div class="input-group" style="gap:.4rem"><select id="c-bag" aria-label="Bag weight">
+                <option>25</option><option>30</option><option>40</option><option>50</option><option>60</option><option selected>75</option><option>80</option><option>100</option><option value="custom">Other…</option></select>
+                <input id="c-bag-custom" class="hidden" type="number" min="1" max="1000" step="any" inputmode="decimal" placeholder="kg" aria-label="Custom bag weight in kg" style="max-width:7rem"></div>
+              <p class="hint">kg per bag</p></div>
+            <div class="field" id="price-wrap"><label for="c-price">Selling price (INR per quintal) <span class="muted small">optional</span></label><input id="c-price" type="number" min="0" step="any" inputmode="decimal"></div>
+          </div>
+        </form>
+      </section>
+
+      <section aria-labelledby="s3" aria-live="polite">
+        <div class="step-title"><h2 id="s3">Result</h2></div>
+        <div id="result"></div>
+        <div id="save-box" class="plot hidden" style="margin-top:1rem">
+          <form id="save-form" class="row" novalidate>
+            <div class="field" style="margin:0;flex:1 1 220px"><label for="save-label" class="sr-only">Name for this calculation</label><input id="save-label" type="text" maxlength="80" placeholder="Name, e.g. North plot paddy 2026"></div>
+            <button class="btn dark" type="submit" data-busy-text="Saving">Save to my farm</button>
+          </form>
+        </div>
+        <p id="save-hint" class="small muted hidden" style="margin-top:.8rem"><a href="/login?role=farmer&next=/calculator">Log in as a farmer</a> to save calculations.</p>
+        <p class="small muted" style="margin-top:1rem">Yields are indicative national averages. Real yields vary with variety, soil, water and season.</p>
+      </section>
+    </div>
+  </main>
+  <footer id="site-footer"></footer>
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script type="module" src="/js/calculator.js"></script>
+</body>
+</html>

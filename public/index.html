@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>AgriConnect: tractors, drones, harvesters and farm labour near you</title>
+  <meta name="description" content="Find tractors, harvesters, spraying drones and farm labour close to your field, and book them directly from the owner.">
+  <meta name="theme-color" content="#143d27">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AgriConnect">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="page-dark">
+  <header id="site-header"></header>
+
+  <main>
+    <section class="hero container" aria-labelledby="hero-title">
+      <div class="hero-grid">
+        <div>
+          <h1 id="hero-title">Machines and farm labour, within reach of your field</h1>
+          <p class="lede">Search tractors, harvesters, drones and work crews listed by owners around you. Closest first, with prices up front.</p>
+
+          <form id="search-form" class="plot search-panel" novalidate>
+            <div class="row">
+              <div class="segmented" role="group" aria-label="What are you looking for">
+                <button type="button" data-mode="tools" aria-pressed="true">Machinery</button>
+                <button type="button" data-mode="labour" aria-pressed="false">Labour</button>
+              </div>
+            </div>
+
+            <div class="form-grid" style="margin-top:.9rem">
+              <div class="field">
+                <label for="f-category" id="f-category-label">Type of machine</label>
+                <select id="f-category"><option value="">All machines</option></select>
+              </div>
+              <div class="field">
+                <label for="f-radius">Distance from you</label>
+                <select id="f-radius">
+                  <option value="10">Within 10 km</option>
+                  <option value="25">Within 25 km</option>
+                  <option value="50" selected>Within 50 km</option>
+                  <option value="100">Within 100 km</option>
+                  <option value="250">Within 250 km</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row">
+              <button class="btn dark" type="button" id="btn-locate">Use my location</button>
+              <button class="btn" type="submit">Search</button>
+            </div>
+            <p class="loc-status" id="loc-status" aria-live="polite">Tap “Use my location”, or tap the map to choose where your field is.</p>
+          </form>
+        </div>
+
+        <div id="map" class="map hero-map" role="region" aria-label="Map of machines near you"></div>
+      </div>
+    </section>
+
+    <section class="container" aria-live="polite">
+      <div class="results-bar">
+        <h2 id="results-title">Nearby machinery</h2>
+        <div class="filters">
+          <label class="check" id="op-wrap"><input type="checkbox" id="f-operator"> With operator</label>
+          <label class="sr-only" for="f-sort">Sort by</label>
+          <select id="f-sort">
+            <option value="distance">Nearest first</option>
+            <option value="price_low">Price: low to high</option>
+            <option value="price_high">Price: high to low</option>
+            <option value="newest">Newest</option>
+          </select>
+        </div>
+      </div>
+      <div id="results" class="listing-grid"></div>
+      <div class="row" style="justify-content:center;margin-top:1.25rem">
+        <button class="btn ghost hidden" id="btn-more" type="button">Show more</button>
+      </div>
+    </section>
+  </main>
+
+  <footer id="site-footer"></footer>
+
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script type="module" src="/js/index.js"></script>
+</body>
+</html>

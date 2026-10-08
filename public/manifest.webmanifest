@@ -1,0 +1,21 @@
+{
+  "name": "AgriConnect",
+  "short_name": "AgriConnect",
+  "description": "Find tractors, harvesters, drones and farm labour near your field. Measure land and estimate crop yield.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#143d27",
+  "theme_color": "#143d27",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Find machines", "url": "/" },
+    { "name": "Yield calculator", "url": "/calculator" },
+    { "name": "My farm", "url": "/farmer" }
+  ]
+}

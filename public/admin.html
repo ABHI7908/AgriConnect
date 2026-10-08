@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Admin · AgriConnect</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#143d27">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AgriConnect">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="admin-page">
+  <header id="site-header"></header>
+  <main class="container" style="padding-top:1.5rem">
+    <section id="login" class="auth-wrap hidden">
+      <h1 style="font-size:2rem">Admin sign in</h1>
+      <form id="login-form" class="plot" novalidate>
+        <div class="field"><label for="a-email">Email</label><input id="a-email" name="email" type="email" autocomplete="username" required></div>
+        <div class="field"><label for="a-pass">Password</label><input id="a-pass" name="password" type="password" autocomplete="current-password" required></div>
+        <button class="btn block" type="submit" data-busy-text="Signing in">Sign in</button>
+      </form>
+    </section>
+    <section id="dash" class="hidden">
+      <h1 style="font-size:2rem">Admin panel</h1>
+      <div class="tabs" id="tabs"></div>
+      <section id="panel-overview"></section>
+      <section id="panel-moderation" class="hidden"></section>
+      <section id="panel-users" class="hidden"></section>
+      <section id="panel-bookings" class="hidden"></section>
+      <section id="panel-audit" class="hidden"></section>
+      <section id="panel-crops" class="hidden"></section>
+    </section>
+  </main>
+  <footer id="site-footer"></footer>
+  <script type="module" src="/js/admin.js"></script>
+</body>
+</html>

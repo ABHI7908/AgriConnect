@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Log in · AgriConnect</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#143d27">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AgriConnect">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="page-dark">
+  <header id="site-header"></header>
+  <main class="container login-main">
+    <div class="login-layout">
+      <section class="login-showcase" aria-labelledby="showcase-title">
+        <p class="login-eyebrow"><span aria-hidden="true">✦</span> Farm services, closer to you</p>
+        <h1 id="showcase-title">Make every farm decision with confidence.</h1>
+        <p class="login-showcase-lede">Find the right machine or farm crew nearby, plan your land, and estimate your crop yield—all in one place.</p>
+        <div class="login-feature-list">
+          <article class="login-feature">
+            <span class="login-feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M3 17h2l2-6h7l3 6h4M5 17a2 2 0 1 0 4 0m7 0a2 2 0 1 0 4 0M7 11l1-4h5l1 4M11 7V4h4l2 3M2 20h20"/></svg>
+            </span>
+            <span><strong>Machinery &amp; farm labour</strong><small>Explore nearby listings and send booking requests directly.</small></span>
+          </article>
+          <article class="login-feature">
+            <span class="login-feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="m3 7 6-3 6 3 6-3v13l-6 3-6-3-6 3V7Z"/><path d="M9 4v13m6-10v13"/></svg>
+            </span>
+            <span><strong>Measure your land</strong><small>Walk your boundary with GPS or mark it on a map.</small></span>
+          </article>
+          <article class="login-feature">
+            <span class="login-feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 19V5m0 14h17M8 16v-4m5 4V8m5 8v-7"/><path d="m7 9 5-3 4 2 4-4"/></svg>
+            </span>
+            <span><strong>Estimate crop yield</strong><small>Plan harvest quantities and expected income.</small></span>
+          </article>
+        </div>
+        <button class="login-browse-link" type="button" data-screen-button="register">Create account to continue <span aria-hidden="true">→</span></button>
+      </section>
+
+      <div class="auth-wrap login-auth-card" id="auth-root">
+      <h1 style="font-size:2rem">AgriConnect account</h1>
+      <p class="muted">Register with your details, then sign in with your mobile OTP or password.</p>
+
+      <div class="segmented" role="group" aria-label="Account type" style="margin-bottom:1.25rem">
+        <button type="button" data-role="farmer" aria-pressed="true">I am a farmer</button>
+        <button type="button" data-role="owner" aria-pressed="false">I own machines / labour</button>
+      </div>
+
+      <div class="segmented" role="group" aria-label="Sign in or register" style="margin-bottom:1rem">
+        <button type="button" data-screen-button="login" aria-pressed="true">Log in</button>
+        <button type="button" data-screen-button="register" aria-pressed="false">Create account</button>
+      </div>
+
+      <section id="login-screen" class="plot" data-screen="login">
+        <div class="segmented" role="group" aria-label="Sign-in method" style="margin-bottom:1rem">
+          <button type="button" data-login-method="otp" aria-pressed="true">Mobile OTP</button>
+          <button type="button" data-login-method="password" aria-pressed="false">Password</button>
+        </div>
+        <div class="field">
+          <label for="login-phone">Registered mobile number</label>
+          <div class="input-group"><span class="prefix">+91</span>
+            <input id="login-phone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="98765 43210" required></div>
+        </div>
+        <div id="login-otp-panel">
+          <p class="err hidden" id="login-otp-error" role="alert"></p>
+          <button class="btn block" id="send-login-otp" type="button" data-busy-text="Sending OTP">Send OTP</button>
+        </div>
+        <form id="password-form" class="hidden" novalidate>
+          <div class="field"><label for="login-password">Password</label><div class="password-control"><input id="login-password" name="password" type="password" autocomplete="current-password" required><button class="password-toggle" type="button" data-password-toggle aria-label="Show password" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+          <p class="err hidden" id="password-error" role="alert"></p>
+          <button class="btn block" type="submit" data-busy-text="Signing in">Log in</button>
+          <button class="btn ghost small" id="forgot-password" type="button" style="margin-top:.5rem">Forgot password?</button>
+        </form>
+      </section>
+
+      <section id="register-screen" class="plot hidden" data-screen="register">
+        <form id="register-form" novalidate>
+          <div class="form-grid">
+            <div class="field full"><label for="register-name">Your name</label><input id="register-name" name="name" type="text" maxlength="80" autocomplete="name" required></div>
+            <div class="field full"><label for="register-email">Email address</label><input id="register-email" name="email" type="email" maxlength="254" autocomplete="email" required></div>
+            <div class="field full"><label for="register-phone">Mobile number</label><div class="input-group"><span class="prefix">+91</span><input id="register-phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="98765 43210" required></div></div>
+            <div class="field full"><label for="register-password">Create password</label><div class="password-control"><input id="register-password" name="password" type="password" minlength="8" maxlength="200" autocomplete="new-password" required><button class="password-toggle" type="button" data-password-toggle aria-label="Show password" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div><span class="hint muted">Use at least 8 characters. You can also sign in with an OTP.</span></div>
+            <div class="field full"><label for="register-confirm-password">Confirm password</label><div class="password-control"><input id="register-confirm-password" name="confirmPassword" type="password" minlength="8" maxlength="200" autocomplete="new-password" required><button class="password-toggle" type="button" data-password-toggle aria-label="Show password" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+          </div>
+          <p class="err hidden" id="register-error" role="alert"></p>
+          <button class="btn block" type="submit" data-busy-text="Sending verification code">Verify mobile and register</button>
+        </form>
+      </section>
+
+      <section id="password-reset-otp-screen" class="plot hidden" data-screen="password-reset-otp">
+        <form id="password-reset-form" novalidate>
+          <h2 style="font-size:1.4rem">Reset your password</h2>
+          <p>Enter the OTP sent to <strong id="reset-otp-phone"></strong>, then choose a new password.</p>
+          <div id="reset-dev-otp" class="dev-otp hidden"></div>
+          <div class="field"><label for="reset-otp-code">One-time password</label><input id="reset-otp-code" class="otp-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required></div>
+          <div class="field"><label for="reset-password">New password</label><div class="password-control"><input id="reset-password" type="password" minlength="8" maxlength="200" autocomplete="new-password" required><button class="password-toggle" type="button" data-password-toggle aria-label="Show password" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+          <div class="field"><label for="reset-confirm-password">Confirm new password</label><div class="password-control"><input id="reset-confirm-password" type="password" minlength="8" maxlength="200" autocomplete="new-password" required><button class="password-toggle" type="button" data-password-toggle aria-label="Show password" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+          <p class="err hidden" id="reset-password-error" role="alert"></p>
+          <button class="btn block" type="submit" data-busy-text="Updating password">Verify OTP and change password</button>
+          <button class="btn ghost small" id="resend-reset-otp" type="button" style="margin-top:.5rem">Resend OTP</button>
+          <button class="btn ghost small" id="back-from-reset" type="button" style="margin-top:.5rem">Back to login</button>
+        </form>
+      </section>
+
+      <section id="password-reset-complete-screen" class="plot hidden" data-screen="password-reset-complete">
+        <h2 style="font-size:1.4rem">Password changed</h2>
+        <p>Your password has been updated. Log in with your new password or use a mobile OTP.</p>
+        <button class="btn block" id="reset-go-to-login" type="button">Go to login</button>
+      </section>
+
+      <section id="login-otp-screen" class="plot hidden" data-screen="login-otp">
+        <form id="login-otp-form" novalidate>
+          <p>Enter the code sent to <strong id="login-otp-phone"></strong>.</p>
+          <div id="login-dev-otp" class="dev-otp hidden"></div>
+          <div class="field"><label for="login-otp-code">One-time password</label><input id="login-otp-code" class="otp-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required></div>
+          <p class="err hidden" id="login-otp-verify-error" role="alert"></p>
+          <button class="btn block" type="submit" data-busy-text="Checking">Verify and log in</button>
+          <button class="btn ghost small" id="resend-login-otp" type="button" style="margin-top:.5rem">Resend OTP</button>
+          <button class="btn ghost small" id="back-to-login" type="button" style="margin-top:.5rem">Back</button>
+        </form>
+      </section>
+
+      <section id="register-otp-screen" class="plot hidden" data-screen="register-otp">
+        <form id="register-otp-form" novalidate>
+          <p>Enter the verification code sent to <strong id="register-otp-phone"></strong> to complete registration.</p>
+          <div id="register-dev-otp" class="dev-otp hidden"></div>
+          <div class="field"><label for="register-otp-code">One-time password</label><input id="register-otp-code" class="otp-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required></div>
+          <p class="err hidden" id="register-otp-error" role="alert"></p>
+          <button class="btn block" type="submit" data-busy-text="Creating account">Verify and register</button>
+          <button class="btn ghost small" id="resend-register-otp" type="button" style="margin-top:.5rem">Resend code</button>
+          <button class="btn ghost small" id="back-to-register" type="button" style="margin-top:.5rem">Back to registration</button>
+        </form>
+      </section>
+
+      <section id="registration-complete-screen" class="plot hidden" data-screen="registration-complete">
+        <h2 style="font-size:1.4rem">Registration complete</h2>
+        <p>Your mobile number is verified. You can now log in with an OTP or your password.</p>
+        <button class="btn block" id="go-to-login" type="button">Go to login</button>
+      </section>
+      </div>
+    </div>
+  </main>
+  <footer id="site-footer"></footer>
+  <script type="module" src="/js/login.js"></script>
+</body>
+</html>

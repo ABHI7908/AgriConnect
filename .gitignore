@@ -1,0 +1,7 @@
+.env
+node_modules/
+.expo/
+data/*.db*
+uploads/*
+!uploads/.gitkeep
+*.log
