@@ -60,8 +60,8 @@ async function imagesByTool(toolIds) {
   if (!toolIds.length) return map;
   const rows = await db
     .prepare(
-      `SELECT * FROM tool_images WHERE tool_id IN (${toolIds.map(() => '?').join(',')}) ORDER BY position, id`
-    )
+       `SELECT id, tool_id, filename, mime, size_bytes, position, created_at
+        FROM tool_images WHERE tool_id IN (${toolIds.map(() => '?').join(',')}) ORDER BY position, id`    )
     .all(...toolIds);
   for (const r of rows) {
     if (!map.has(r.tool_id)) map.set(r.tool_id, []);

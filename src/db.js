@@ -5,15 +5,12 @@ const { AsyncLocalStorage } = require('async_hooks');
 const config = require('./config');
 const transactionContext = new AsyncLocalStorage();
 
-types.setTypeParser(types.builtins.INT8, (value) => {
-  const number = Number(value);
-  return Number.isSafeInteger(number) ? number : value;
-});
+types.setTypeParser(1082, (value) => value);
 
 let pool;
 if (config.NODE_ENV === 'test') {
   const testDatabase = import('@electric-sql/pglite').then(async ({ PGlite }) => {
-    const database = new PGlite();
+   const database = new PGlite({ parsers: { 1082: (value) => value } });
     await database.waitReady;
     return database;
   });

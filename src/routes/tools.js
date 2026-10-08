@@ -263,7 +263,7 @@ router.put(
     const tool = await ownTool(req);
     const b = req.valid.body;
 
-    const existing = await db.prepare('SELECT * FROM tool_images WHERE tool_id = ?').all(tool.id);
+    const existing = await db.prepare('SELECT id FROM tool_images WHERE tool_id = ?').all(tool.id);
     const toRemove = existing.filter((i) => (b.removeImageIds || []).includes(i.id));
     const newCount = req.files ? req.files.length : 0;
     const finalCount = existing.length - toRemove.length + newCount;

@@ -71,6 +71,10 @@ const env = parsed.data;
 const isProd = env.NODE_ENV === 'production';
 
 if (isProd) {
+  if (env.TRUST_PROXY === 0) {
+    // eslint-disable-next-line no-console
+    console.warn('TRUST_PROXY=0 in production: behind a proxy/load balancer every client shares one IP, so rate limits will lock everyone out. Set TRUST_PROXY=1 if you deploy behind one.');
+  }
   const problems = [];
   if (/change-me/i.test(env.JWT_SECRET)) problems.push('JWT_SECRET still has the placeholder value');
   if (/change-me/i.test(env.OTP_PEPPER)) problems.push('OTP_PEPPER still has the placeholder value');

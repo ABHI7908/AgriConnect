@@ -306,17 +306,30 @@ router.patch(
       throw new AppError(409, `A booking that is "${row.status}" cannot be changed to "${status}"`, 'BAD_TRANSITION');
     }
 
-    if (status === 'accepted' && row.tool_id && await overlapsExistingBooking(row.tool_id, row.start_date, row.end_date, row.id)) {
-      throw conflict('You already have another confirmed booking for this tool on those dates');
-    }
+    const applyStatus = async () => {
+      const result = await db.prepare(
+        `UPDATE bookings SET status = ?,
+                final_amount = CASE WHEN ? = 'completed' THEN COALESCE(?, quoted_amount) ELSE final_amount END,
+                completed_at = CASE WHEN ? = 'completed' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE completed_at END,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+          WHERE id = ? AND status = ?`
+      ).run(status, status, finalAmount ?? null, status, row.id, row.status);
+      if (result.changes !== 1) {
+        throw new AppError(409, 'This booking was just updated by someone else. Please refresh.', 'BAD_TRANSITION');
+      }
+    };
 
-    await db.prepare(
-      `UPDATE bookings SET status = ?,
-              final_amount = CASE WHEN ? = 'completed' THEN COALESCE(?, quoted_amount) ELSE final_amount END,
-              completed_at = CASE WHEN ? = 'completed' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE completed_at END,
-              updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-        WHERE id = ?`
-    ).run(status, status, finalAmount ?? null, status, row.id);
+    if (status === 'accepted' && row.tool_id) {
+      await db.transaction(async () => {
+        await db.prepare('SELECT id FROM tools WHERE id = ? FOR UPDATE').get(row.tool_id);
+        if (await overlapsExistingBooking(row.tool_id, row.start_date, row.end_date, row.id)) {
+          throw conflict('You already have another confirmed booking for this tool on those dates');
+        }
+        await applyStatus();
+      })();
+    } else {
+      await applyStatus();
+    }
 
     audit(req, `booking.${status}`, { entity: 'booking', entityId: row.id, meta: { from: row.status } });
     res.json({ booking: bookingDto(await loadBooking(row.id), req.user.role) });
