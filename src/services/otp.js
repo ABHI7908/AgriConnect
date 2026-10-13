@@ -23,6 +23,7 @@ const latestStmt = db.prepare(
 const countHourStmt = db.prepare(
   `SELECT COUNT(*) AS n FROM otp_codes WHERE phone = ? AND role = ? AND created_at > ?`
 );
+const countAllHourStmt = db.prepare(`SELECT COUNT(*) AS n FROM otp_codes WHERE created_at > ?`);
 const invalidateStmt = db.prepare(
   `UPDATE otp_codes SET consumed = 1 WHERE phone = ? AND role = ? AND consumed = 0`
 );
@@ -44,6 +45,16 @@ async function requestOtp(phone, role, ip) {
   const { n } = await countHourStmt.get(phone, role, now - 3600);
   if (n >= config.OTP_MAX_PER_HOUR) {
     throw new AppError(429, 'Too many OTP requests for this number. Please try again later.', 'OTP_LIMIT');
+  }
+
+  // Global circuit breaker: if OTP volume across all numbers spikes (SMS pumping), stop sending.
+  if (config.OTP_GLOBAL_MAX_PER_HOUR > 0) {
+    const { n: total } = await countAllHourStmt.get(now - 3600);
+    if (total >= config.OTP_GLOBAL_MAX_PER_HOUR) {
+      // eslint-disable-next-line no-console
+      console.error(`OTP global hourly cap (${config.OTP_GLOBAL_MAX_PER_HOUR}) reached; refusing to send more SMS.`);
+      throw new AppError(503, 'We are receiving a lot of requests right now. Please try again later.', 'OTP_BUSY');
+    }
   }
 
   const code = generateCode();

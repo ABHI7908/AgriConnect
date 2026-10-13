@@ -12,6 +12,7 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { execFileSync } = require('child_process');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agri-test-'));
 Object.assign(process.env, {
@@ -24,6 +25,7 @@ Object.assign(process.env, {
   OTP_PEPPER: crypto.randomBytes(16).toString('hex'),
   SMS_PROVIDER: 'console',
   OTP_RESEND_COOLDOWN_SECONDS: '0',
+  OTP_GLOBAL_MAX_PER_HOUR: '1000',
   LISTINGS_REQUIRE_APPROVAL: 'true',
   ADMIN_EMAIL: 'admin@test.local',
   ADMIN_PASSWORD: 'Sup3r-Secret-Admin!',
@@ -586,6 +588,140 @@ async function main() {
   check('blocked user session stops working immediately', blockedCall.status === 401);
   const blockedOtp = await anon.post('/api/auth/otp/request', { phone: '9000000002', role: 'farmer' });
   check('blocked user cannot request a new OTP', blockedOtp.status === 403);
+
+  realLog('\nHardening: moderation, public data, search, chat, alerts');
+  const visitor = makeClient(base); // genuinely signed-out client (the shared `anon` client signs in during earlier sections)
+  const editForm = (over = {}) => toolForm({ address: 'Plot 5, Secret Lane', ...over }, false);
+
+  // 1. Editing public text on an approved listing sends it back to moderation.
+  const renamed = await owner.send('PUT', `/api/tools/${toolId}`, { form: editForm({ name: 'Mahindra 575 DI XP' }) });
+  check('owner can edit an approved listing', renamed.status === 200, renamed.data);
+  check('renaming an approved listing sends it back to moderation', renamed.data.tool?.status === 'pending', renamed.data.tool?.status);
+  const hiddenWhilePending = await visitor.get('/api/tools?lat=17.54&lng=78.49&radiusKm=50');
+  check('re-moderated listing disappears from public search', hiddenWhilePending.data.total === 0, hiddenWhilePending.data.total);
+  await admin.patch(`/api/admin/tools/${toolId}/status`, { status: 'approved', note: 'internal: checked docs' });
+
+  // 2. Non-public changes (price/coordinates) do not require another review.
+  const repriced = await owner.send('PUT', `/api/tools/${toolId}`, {
+    form: editForm({ name: 'Mahindra 575 DI XP', pricePerDay: '2400', lat: '17.5734', lng: '78.5766' }),
+  });
+  check('price/location edits keep an approved listing approved', repriced.status === 200 && repriced.data.tool.status === 'approved', repriced.data.tool?.status);
+
+  // 3. Public responses do not leak the address / admin note and coarsen coordinates for anonymous users.
+  const anonDetail = (await visitor.get(`/api/tools/${toolId}`)).data.tool;
+  check('anonymous detail hides address and admin note', anonDetail.address === undefined && anonDetail.adminNote === undefined, anonDetail);
+  check('anonymous detail has ~1 km coordinates', anonDetail.lat === 17.57 && anonDetail.lng === 78.58, [anonDetail.lat, anonDetail.lng]);
+  const signedInDetail = (await farmer2.get(`/api/tools/${toolId}`)).data.tool;
+  check('signed-in user sees exact coordinates but not the address', signedInDetail.lat === 17.5734 && signedInDetail.address === undefined && signedInDetail.adminNote === undefined, signedInDetail);
+  const ownerDetail = (await owner.get(`/api/tools/${toolId}`)).data.tool;
+  check('owner still sees address and admin note', ownerDetail.address === 'Plot 5, Secret Lane' && ownerDetail.adminNote === 'internal: checked docs', ownerDetail);
+  const anonSearch = (await visitor.get('/api/tools?lat=17.54&lng=78.49&radiusKm=50')).data.items[0];
+  check('anonymous search results hide address and admin note', anonSearch && anonSearch.address === undefined && anonSearch.adminNote === undefined);
+
+  // 4. A rejected listing is resubmitted when the owner saves it.
+  await admin.patch(`/api/admin/tools/${toolId}/status`, { status: 'rejected', note: 'blurry photo' });
+  const resubmitted = await owner.send('PUT', `/api/tools/${toolId}`, { form: editForm({ name: 'Mahindra 575 DI XP', pricePerDay: '2400', lat: '17.5734', lng: '78.5766' }) });
+  check('saving a rejected listing resubmits it for review', resubmitted.status === 200 && resubmitted.data.tool.status === 'pending', resubmitted.data.tool?.status);
+
+  // restore the fixture used by the remaining sections
+  await owner.send('PUT', `/api/tools/${toolId}`, { form: toolForm({ address: '' }, false) });
+  await admin.patch(`/api/admin/tools/${toolId}/status`, { status: 'approved' });
+
+  // 5. SQL search: distance filter, ordering and pagination.
+  const second = await owner.send('POST', '/api/tools', {
+    form: toolForm({ name: 'Cheap Rotavator', category: 'tractor', pricePerDay: '1000', pricePerHour: '', lat: '17.60', lng: '78.60' }),
+  });
+  check('second listing created', second.status === 201, second.data);
+  const secondId = second.data.tool.id;
+  await admin.patch(`/api/admin/tools/${secondId}/status`, { status: 'approved' });
+  const q = '/api/tools?lat=17.54&lng=78.49&radiusKm=50';
+  const byDistance = (await visitor.get(`${q}&sort=distance`)).data;
+  check('search sorts by distance in SQL', byDistance.total === 2 && byDistance.items[0].id === toolId && byDistance.items[1].id === secondId
+    && byDistance.items[0].distanceKm < byDistance.items[1].distanceKm, byDistance.items?.map((i) => [i.id, i.distanceKm]));
+  const cheapFirst = (await visitor.get(`${q}&sort=price_low`)).data;
+  check('search sorts by price (low to high)', cheapFirst.items[0].id === secondId, cheapFirst.items?.map((i) => i.id));
+  const dearFirst = (await visitor.get(`${q}&sort=price_high`)).data;
+  check('search sorts by price (high to low)', dearFirst.items[0].id === toolId, dearFirst.items?.map((i) => i.id));
+  const page2 = (await visitor.get(`${q}&sort=distance&pageSize=1&page=2`)).data;
+  check('search pagination returns the right page and total', page2.total === 2 && page2.items.length === 1 && page2.items[0].id === secondId, page2);
+  const page3 = (await visitor.get(`${q}&sort=distance&pageSize=1&page=3`)).data;
+  check('search past the last page is empty but keeps the total', page3.total === 2 && page3.items.length === 0, page3);
+  const noLoc = (await visitor.get('/api/tools')).data;
+  check('search without a location lists newest first with no distance', noLoc.items[0].id === secondId && noLoc.items[0].distanceKm === null, noLoc.items?.map((i) => [i.id, i.distanceKm]));
+  const radius = (await visitor.get('/api/tools?lat=17.54&lng=78.49&radiusKm=11')).data;
+  check('radius filter drops listings outside the circle', radius.total === 1 && radius.items[0].id === toolId, radius.items?.map((i) => [i.id, i.distanceKm]));
+  await owner.del(`/api/tools/${secondId}`);
+
+  // 6. Labour listings: public text changes are re-moderated.
+  const { LABOUR_SKILL_IDS: skillIds } = require('../src/constants');
+  const labourBody = (over = {}) => ({
+    title: 'Harvest team', skill: skillIds[0], teamSize: 5, wagePerDay: 600,
+    village: 'Shamirpet', district: 'Medchal', state: 'Telangana', lat: 17.57, lng: 78.57, ...over,
+  });
+  const newLabour = await owner.post('/api/labour', labourBody());
+  check('labour listing created', newLabour.status === 201, newLabour.data);
+  const newLabourId = newLabour.data.labour?.id;
+  await admin.patch(`/api/admin/labour/${newLabourId}/status`, { status: 'approved' });
+  const wageOnly = await owner.put(`/api/labour/${newLabourId}`, labourBody({ wagePerDay: 650 }));
+  check('wage change keeps an approved labour listing approved', wageOnly.status === 200 && wageOnly.data.labour.status === 'approved', wageOnly.data);
+  const retitled = await owner.put(`/api/labour/${newLabourId}`, labourBody({ title: 'Harvest team (renamed)' }));
+  check('renaming an approved labour listing sends it back to moderation', retitled.status === 200 && retitled.data.labour.status === 'pending', retitled.data);
+  const anonLabour = await visitor.get(`/api/labour/${newLabourId}`);
+  check('pending labour listing is hidden from the public', anonLabour.status === 404, anonLabour.status);
+  await owner.del(`/api/labour/${newLabourId}`);
+
+  // 7. Chat history shows the NEWEST 200 messages, oldest first.
+  const chatStart = await farmer2.post('/api/communications/chats', { kind: 'tool', listingId: toolId, body: 'FIRST-MESSAGE' });
+  const chatId = chatStart.data.id;
+  const chatRow = await db.prepare('SELECT farmer_id FROM service_chats WHERE id = ?').get(chatId);
+  for (let i = 0; i < 205; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    await db.prepare('INSERT INTO service_chat_messages (chat_id, sender_id, body) VALUES (?, ?, ?)').run(chatId, chatRow.farmer_id, `filler-${i}`);
+  }
+  await farmer2.post(`/api/communications/chats/${chatId}/messages`, { body: 'LATEST-MESSAGE' });
+  const history = (await farmer2.get(`/api/communications/chats/${chatId}/messages`)).data;
+  check('chat history is capped at 200 messages', history.items.length === 200, history.items?.length);
+  check('chat history includes the newest message last', history.items.at(-1)?.body === 'LATEST-MESSAGE', history.items?.at(-1));
+  check('chat history drops the oldest messages instead', !history.items.some((m) => m.body === 'FIRST-MESSAGE'));
+
+  // 8. Alert SMS are throttled per phone number.
+  const notifications = require('../src/services/notifications');
+  const t0 = Date.now();
+  check('first alert SMS to a number is allowed', notifications.alertAllowed('+919111111111', t0) === true);
+  check('repeat alert SMS within the interval is suppressed', notifications.alertAllowed('+919111111111', t0 + 1000) === false);
+  check('a different number is not affected', notifications.alertAllowed('+919222222222', t0 + 1000) === true);
+  check('alert SMS allowed again after the interval', notifications.alertAllowed('+919111111111', t0 + 301 * 1000) === true);
+
+  // 9. Global OTP circuit breaker (SMS pumping protection).
+  await db.prepare(
+    `INSERT INTO otp_codes (phone, role, code_hash, expires_at, created_at)
+     SELECT '+9190000' || g, 'farmer', 'cap-test', EXTRACT(EPOCH FROM NOW())::bigint + 300, EXTRACT(EPOCH FROM NOW())::bigint
+       FROM generate_series(1, 1000) g`
+  ).run();
+  const { requestOtp } = require('../src/services/otp');
+  let capError = null;
+  try { await requestOtp('+919000000001', 'owner', '203.0.113.9'); } catch (err) { capError = err; }
+  check('OTP requests are refused once the global hourly cap is hit', capError && capError.status === 503 && capError.code === 'OTP_BUSY', capError && [capError.status, capError.code]);
+  await db.prepare(`DELETE FROM otp_codes WHERE code_hash = 'cap-test'`).run();
+
+  // 10. Database manager is opt-in in production.
+  const prodEnv = {
+    PATH: process.env.PATH, NODE_ENV: 'production', DATABASE_URL: 'postgres://u:p@localhost/db',
+    JWT_SECRET: 'a'.repeat(40), OTP_PEPPER: 'b'.repeat(20), SMS_PROVIDER: 'twilio',
+    TWILIO_ACCOUNT_SID: 'x', TWILIO_AUTH_TOKEN: 'y', TWILIO_FROM: '+1555',
+  };
+  const probe = (extra) => JSON.parse(execFileSync(process.execPath, ['-e',
+    "const c=require('./src/config');console.log(JSON.stringify({on:c.dbManagerEnabled,ips:c.dbManagerAllowedIps}))"],
+  { cwd: path.join(__dirname, '..'), env: { ...prodEnv, ...extra }, stdio: ['ignore', 'pipe', 'ignore'] }).toString());
+  check('database manager is disabled by default in production', probe({}).on === false);
+  let prodRefused = false;
+  try { probe({ DB_MANAGER_ENABLED: 'true' }); } catch (_) { prodRefused = true; }
+  check('enabling it in production without credentials refuses to start', prodRefused);
+  const prodOn = probe({
+    DB_MANAGER_ENABLED: 'true', DB_MANAGER_EMAIL: 'dba@example.com', DB_MANAGER_PASSWORD: 'a-very-long-unique-passphrase-1',
+    DB_MANAGER_ALLOWED_IPS: '10.0.0.5, 10.0.0.6',
+  });
+  check('enabled with credentials and an IP allowlist', prodOn.on === true && prodOn.ips.length === 2 && prodOn.ips[1] === '10.0.0.6', prodOn);
 
   realLog('\nOwner deleting listing');
   const openBooking = await farmer2.post('/api/bookings', {

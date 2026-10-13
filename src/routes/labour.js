@@ -7,7 +7,7 @@ const config = require('../config');
 const { LABOUR_SKILL_IDS } = require('../constants');
 const { validate } = require('../middleware/validate');
 const { requireRole, requireCompleteProfile } = require('../middleware/auth');
-const { searchNearest, ratingsFor, labourDto } = require('../services/listings');
+const { searchNearest, ratingsFor, labourDto, forViewer, moderatedFieldsChanged } = require('../services/listings');
 const { audit } = require('../utils/audit');
 const { notFound, conflict, forbidden } = require('../utils/errors');
 const S = require('../utils/schemas');
@@ -42,6 +42,12 @@ const searchQuery = z.object({
 });
 
 const idParams = z.object({ id: S.id });
+
+// Text that other users read; changing any of it on an approved listing sends it back to moderation.
+const MODERATED_LABOUR_FIELDS = [
+  ['title', 'title'], ['skill', 'skill'], ['description', 'description'],
+  ['village', 'village'], ['district', 'district'], ['state', 'state'], ['address', 'address'],
+];
 
 const initialStatus = () => (config.LISTINGS_REQUIRE_APPROVAL ? 'pending' : 'approved');
 
@@ -100,7 +106,7 @@ router.get('/', validate({ query: searchQuery }), async (req, res) => {
     page: f.page,
     pageSize: f.pageSize,
     locationUsed: hasLocation,
-    items: items.map((r) => labourDto(r, ratings.get(r.id))),
+    items: items.map((r) => forViewer(labourDto(r, ratings.get(r.id)), req.user, 'providerId')),
   });
 });
 
@@ -122,7 +128,7 @@ router.get('/:id', validate({ params: idParams }), async (req, res) => {
   const viewer = req.user;
   const canSeeUnapproved = viewer && (viewer.role === 'admin' || viewer.id === item.providerId);
   if (item.status !== 'approved' && !canSeeUnapproved) throw notFound('Labour listing not found');
-  res.json({ labour: item });
+  res.json({ labour: forViewer(item, viewer, 'providerId') });
 });
 
 /* ------------------------------------------------------------- CRUD */
@@ -147,7 +153,9 @@ router.post('/', requireRole('owner'), requireCompleteProfile, validate({ body: 
 router.put('/:id', requireRole('owner'), validate({ params: idParams, body: labourBody }), async (req, res) => {
   const row = await ownListing(req);
   const b = req.valid.body;
-  const needsReview = config.LISTINGS_REQUIRE_APPROVAL && row.status === 'approved' && b.description !== row.description;
+  const needsReview =
+    config.LISTINGS_REQUIRE_APPROVAL &&
+    (row.status === 'rejected' || (row.status === 'approved' && moderatedFieldsChanged(row, b, MODERATED_LABOUR_FIELDS)));
   await db.prepare(
     `UPDATE labour_listings SET title=?, skill=?, team_size=?, wage_per_day=?, description=?,
             village=?, district=?, state=?, address=?, lat=?, lng=?, service_radius_km=?,

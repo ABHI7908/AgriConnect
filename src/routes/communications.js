@@ -262,16 +262,20 @@ router.post('/chats', requireRole('farmer'), validate({ body: chatStartBody }), 
 
 router.get('/chats/:id/messages', requireRole('farmer', 'owner'), validate({ params: idParams }), async (req, res) => {
   const chat = await getServiceChat(req.valid.params.id, req.user);
+  // Newest 200 messages, returned oldest-first so the conversation reads top to bottom.
   const messages = await db.prepare(
-    `SELECT m.id, m.sender_id, m.body, m.is_system, m.message_language,
-            (m.audio_data IS NOT NULL) AS has_audio, m.created_at,
-            CASE WHEN m.is_system = 1 THEN 'AgriConnect' ELSE COALESCE(u.business_name, u.name, u.phone) END AS sender_name,
-            CASE WHEN m.is_system = 1 THEN 'system' ELSE u.role END AS sender_role
-       FROM service_chat_messages m
-       LEFT JOIN users u ON u.id = m.sender_id
-      WHERE m.chat_id = ?
-      ORDER BY m.created_at ASC, m.id ASC
-      LIMIT 200`
+    `SELECT * FROM (
+       SELECT m.id, m.sender_id, m.body, m.is_system, m.message_language,
+              (m.audio_data IS NOT NULL) AS has_audio, m.created_at,
+              CASE WHEN m.is_system = 1 THEN 'AgriConnect' ELSE COALESCE(u.business_name, u.name, u.phone) END AS sender_name,
+              CASE WHEN m.is_system = 1 THEN 'system' ELSE u.role END AS sender_role
+         FROM service_chat_messages m
+         LEFT JOIN users u ON u.id = m.sender_id
+        WHERE m.chat_id = ?
+        ORDER BY m.created_at DESC, m.id DESC
+        LIMIT 200
+     ) recent
+     ORDER BY created_at ASC, id ASC`
   ).all(chat.id);
   const canCall = Boolean(chat.call_available);
   res.json({
@@ -417,14 +421,17 @@ router.get(
   async (req, res) => {
     const booking = await getParticipantBooking(req.valid.params.id, req.user);
     const messages = await db.prepare(
-      `SELECT m.id, m.sender_id, m.body, m.created_at,
-              COALESCE(u.business_name, u.name, u.phone) AS sender_name,
-              u.role AS sender_role
-         FROM booking_messages m
-         JOIN users u ON u.id = m.sender_id
-        WHERE m.booking_id = ?
-        ORDER BY m.created_at ASC, m.id ASC
-        LIMIT 200`
+      `SELECT * FROM (
+         SELECT m.id, m.sender_id, m.body, m.created_at,
+                COALESCE(u.business_name, u.name, u.phone) AS sender_name,
+                u.role AS sender_role
+           FROM booking_messages m
+           JOIN users u ON u.id = m.sender_id
+          WHERE m.booking_id = ?
+          ORDER BY m.created_at DESC, m.id DESC
+          LIMIT 200
+       ) recent
+       ORDER BY created_at ASC, id ASC`
     ).all(booking.id);
     res.json({
       booking: { id: booking.id, title: booking.item_title, status: booking.status },

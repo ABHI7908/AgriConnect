@@ -10,7 +10,7 @@ const { requireRole, requireCompleteProfile } = require('../middleware/auth');
 const { uploadImages } = require('../middleware/upload');
 const limits = require('../middleware/rateLimit');
 const storage = require('../services/storage');
-const { searchNearest, imagesByTool, ratingsFor, toolDto } = require('../services/listings');
+const { searchNearest, imagesByTool, ratingsFor, toolDto, forViewer, moderatedFieldsChanged } = require('../services/listings');
 const { audit } = require('../utils/audit');
 const { badRequest, notFound, conflict, forbidden } = require('../utils/errors');
 const S = require('../utils/schemas');
@@ -114,6 +114,13 @@ async function insertImages(toolId, saved) {
   }
 }
 
+// Text that other users read; changing any of it on an approved listing sends it back to moderation.
+const MODERATED_TOOL_FIELDS = [
+  ['category', 'category'], ['name', 'name'], ['brand', 'brand'], ['model', 'model'], ['year', 'year'],
+  ['description', 'description'], ['village', 'village'], ['district', 'district'], ['state', 'state'],
+  ['address', 'address'],
+];
+
 const initialStatus = () => (config.LISTINGS_REQUIRE_APPROVAL ? 'pending' : 'approved');
 
 /* --------------------------------------------------------- Public search */
@@ -163,7 +170,7 @@ router.get('/', validate({ query: searchQuery }), async (req, res) => {
     page: f.page,
     pageSize: f.pageSize,
     locationUsed: hasLocation,
-    items: items.map((r) => toolDto(r, imgs.get(r.id), ratings.get(r.id))),
+    items: items.map((r) => forViewer(toolDto(r, imgs.get(r.id), ratings.get(r.id)), req.user, 'ownerId')),
   });
 });
 
@@ -208,7 +215,7 @@ router.get('/:id', validate({ params: idParams }), async (req, res) => {
       farmer: (r.farmer_name || 'Farmer').split(' ')[0],
     }));
 
-  res.json({ tool, reviews });
+  res.json({ tool: forViewer(tool, viewer, 'ownerId'), reviews });
 });
 
 /* ---------------------------------------------------------- Owner: CRUD */
@@ -274,8 +281,12 @@ router.put(
     }
 
     const saved = await saveUploads(req.files);
-    // New photos on an approved listing go back through moderation when approval is required.
-    const needsReview = config.LISTINGS_REQUIRE_APPROVAL && newCount > 0 && tool.status === 'approved';
+    // New photos or edited public text on an approved listing go back through moderation when approval is required.
+    // A rejected listing that the owner edits and saves is resubmitted for review.
+    const needsReview =
+      config.LISTINGS_REQUIRE_APPROVAL &&
+      (tool.status === 'rejected' ||
+        (tool.status === 'approved' && (newCount > 0 || moderatedFieldsChanged(tool, b, MODERATED_TOOL_FIELDS))));
 
     try {
       await db.transaction(async () => {
