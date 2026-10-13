@@ -1,58 +1,64 @@
 'use strict';
 
 const db = require('../db');
-const { haversineKm, boundingBox } = require('../utils/geo');
+const { boundingBox, EARTH_RADIUS_KM } = require('../utils/geo');
 const { imageDto, round } = require('../utils/serializers');
+
+const PRICE_SQL = {
+  tools: 'COALESCE(x.price_per_day, x.price_per_hour, x.price_per_acre)',
+  labour_listings: 'x.wage_per_day',
+};
 
 /**
  * Shared "find nearest" search used by both machinery and labour listings.
- * `table` and `ownerCol` are hard-coded by callers (never user input).
+ * Distance filtering, sorting and pagination all happen in SQL, so memory use and latency do not
+ * grow with the number of listings. `table` and `ownerCol` are hard-coded by callers (never user input).
  */
-async function searchNearest({ table, ownerCol, filters = [], params = [], lat, lng, radiusKm, sort, page, pageSize, maxRows = 3000 }) {
+async function searchNearest({ table, ownerCol, filters = [], params = [], lat, lng, radiusKm, sort, page, pageSize }) {
+  const priceSql = PRICE_SQL[table];
+  if (!priceSql) throw new Error(`searchNearest: unsupported table ${table}`);
+
   const where = [`x.status = 'approved'`, `x.available = 1`, `u.status = 'active'`, ...filters];
-  const args = [...params];
+  const whereArgs = [...params];
   const hasLocation = lat !== undefined && lng !== undefined;
 
+  let distanceSql = 'NULL::float8';
+  const selectArgs = [];
   if (hasLocation) {
     const box = boundingBox(lat, lng, radiusKm);
     where.push('x.lat BETWEEN ? AND ?', 'x.lng BETWEEN ? AND ?');
-    args.push(box.minLat, box.maxLat, box.minLng, box.maxLng);
+    whereArgs.push(box.minLat, box.maxLat, box.minLng, box.maxLng);
+    distanceSql = `${EARTH_RADIUS_KM * 2} * ASIN(LEAST(1, SQRT(
+        POWER(SIN(RADIANS(x.lat - ?::float8) / 2), 2) +
+        COS(RADIANS(?::float8)) * COS(RADIANS(x.lat)) * POWER(SIN(RADIANS(x.lng - ?::float8) / 2), 2))))`;
+    selectArgs.push(lat, lat, lng);
   }
 
-  const rows = await db
-    .prepare(
-      `SELECT x.*, u.name AS owner_name, u.business_name AS owner_business
-         FROM ${table} x JOIN users u ON u.id = x.${ownerCol}
-        WHERE ${where.join(' AND ')}
-        ORDER BY x.created_at DESC
-        LIMIT ${Number(maxRows)}`
-    )
-    .all(...args);
+  const inner = `
+    SELECT x.*, u.name AS owner_name, u.business_name AS owner_business,
+           ${distanceSql} AS distance_km, ${priceSql} AS sort_price
+      FROM ${table} x JOIN users u ON u.id = x.${ownerCol}
+     WHERE ${where.join(' AND ')}`;
+  const radiusFilter = hasLocation ? 'WHERE q.distance_km <= ?' : '';
+  const baseArgs = [...selectArgs, ...whereArgs, ...(hasLocation ? [radiusKm] : [])];
 
-  let items = rows;
-  if (hasLocation) {
-    items = rows
-      .map((r) => ({ ...r, distance_km: haversineKm(lat, lng, r.lat, r.lng) }))
-      .filter((r) => r.distance_km <= radiusKm);
-  }
-
-  const sorters = {
-    distance: (a, b) => (a.distance_km ?? 0) - (b.distance_km ?? 0),
-    newest: (a, b) => (a.created_at < b.created_at ? 1 : -1),
-    price_low: (a, b) => priceKey(a) - priceKey(b),
-    price_high: (a, b) => priceKey(b) - priceKey(a),
+  const orderBy = {
+    distance: 'q.distance_km ASC, q.id DESC',
+    newest: 'q.created_at DESC, q.id DESC',
+    price_low: 'COALESCE(q.sort_price, 1e18) ASC, q.id DESC',
+    price_high: 'COALESCE(q.sort_price, -1) DESC, q.id DESC',
   };
   const effectiveSort = sort === 'distance' && !hasLocation ? 'newest' : sort;
-  items.sort(sorters[effectiveSort] || sorters.newest);
 
-  const total = items.length;
-  const start = (page - 1) * pageSize;
-  return { total, items: items.slice(start, start + pageSize), hasLocation };
-}
+  const { n: total } = await db.prepare(`SELECT COUNT(*) AS n FROM (${inner}) q ${radiusFilter}`).get(...baseArgs);
+  const rows = await db
+    .prepare(`SELECT q.* FROM (${inner}) q ${radiusFilter} ORDER BY ${orderBy[effectiveSort] || orderBy.newest} LIMIT ? OFFSET ?`)
+    .all(...baseArgs, pageSize, (page - 1) * pageSize);
 
-function priceKey(r) {
-  const p = r.price_per_day ?? r.wage_per_day ?? r.price_per_hour ?? r.price_per_acre;
-  return p == null ? Number.MAX_SAFE_INTEGER : p;
+  const items = rows.map(({ sort_price: _price, distance_km: distance, ...rest }) =>
+    distance === null || distance === undefined ? rest : { ...rest, distance_km: Number(distance) }
+  );
+  return { total: Number(total), items, hasLocation };
 }
 
 async function imagesByTool(toolIds) {
@@ -142,4 +148,24 @@ function labourDto(r, rating) {
   };
 }
 
-module.exports = { searchNearest, imagesByTool, ratingsFor, toolDto, labourDto };
+/**
+ * Remove data that must not leave the server for the person asking.
+ *  - adminNote (internal moderation note) and the street address: owner and admin only.
+ *  - exact coordinates: signed-in users only; anonymous visitors get ~1 km precision, which still
+ *    places the listing on the map but prevents bulk scraping of exact premises locations.
+ */
+function forViewer(dto, viewer, ownerKey) {
+  if (viewer && (viewer.role === 'admin' || viewer.id === dto[ownerKey])) return dto;
+  const { adminNote: _adminNote, address: _address, ...rest } = dto;
+  if (viewer) return rest;
+  const coarse = (v) => (typeof v === 'number' ? Math.round(v * 100) / 100 : v);
+  return { ...rest, lat: coarse(rest.lat), lng: coarse(rest.lng) };
+}
+
+/** True when any of the given fields differs between the stored row (snake_case) and the submitted body (camelCase). */
+function moderatedFieldsChanged(row, body, fields) {
+  const norm = (v) => (v === undefined || v === null ? '' : String(v).trim());
+  return fields.some(([column, key]) => norm(row[column]) !== norm(body[key]));
+}
+
+module.exports = { moderatedFieldsChanged, forViewer, searchNearest, imagesByTool, ratingsFor, toolDto, labourDto };

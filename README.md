@@ -240,7 +240,7 @@ Set at minimum:
 - `JWT_SECRET` to a private random value of at least 32 characters.
 - `OTP_PEPPER` to a private random value of at least 16 characters.
 - `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
-- `DB_MANAGER_EMAIL` and `DB_MANAGER_PASSWORD`.
+- `DB_MANAGER_EMAIL` and `DB_MANAGER_PASSWORD` (only if you set `DB_MANAGER_ENABLED=true`; the database manager is disabled by default in production).
 
 The server creates/updates the PostgreSQL schema at startup and seeds the default crop rows when the crop table is empty. If database SSL is required by the provider, configure `DATABASE_SSL` and `DATABASE_SSL_VERIFY` as described below.
 
@@ -318,11 +318,15 @@ The complete template and comments are in `.env.example`.
 | `UPLOAD_DIR` | Legacy on-disk upload fallback; new listing images are stored in PostgreSQL |
 | `MAX_IMAGES_PER_LISTING`, `MAX_IMAGE_MB` | Upload limits |
 | `OTP_LENGTH`, `OTP_TTL_SECONDS`, `OTP_MAX_ATTEMPTS`, `OTP_RESEND_COOLDOWN_SECONDS`, `OTP_MAX_PER_HOUR` | OTP policy and rate bounds |
+| `OTP_GLOBAL_MAX_PER_HOUR` | Global hourly cap on OTP SMS across all numbers (SMS-pumping circuit breaker; `0` disables) |
+| `ALERT_SMS_MIN_INTERVAL_SECONDS` | Minimum gap between booking/chat alert SMS to the same phone (`0` disables) |
 | `SMS_PROVIDER` | `console`, `twilio`, or `msg91` |
 | `TWILIO_*`, `MSG91_*` | Credentials/template configuration for the selected SMS provider |
 | `MSG91_NOTIFICATION_TEMPLATE_ID` | Optional approved MSG91 Flow template with `VAR1` and `VAR2` for booking/message SMS alerts |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Admin account ensured during startup |
-| `DB_MANAGER_EMAIL`, `DB_MANAGER_PASSWORD` | Separate database-manager login |
+| `DB_MANAGER_ENABLED` | Enables the database manager. Defaults to off in production, on elsewhere |
+| `DB_MANAGER_ALLOWED_IPS` | Optional comma-separated IP allowlist for the database manager |
+| `DB_MANAGER_EMAIL`, `DB_MANAGER_PASSWORD` | Separate database-manager login (required when enabled in production) |
 | `MAP_STREET_TILE_URL`, `MAP_STREET_ATTRIBUTION` | Leaflet street-map tile template and attribution |
 | `MAP_SAT_TILE_URL`, `MAP_SAT_ATTRIBUTION` | Leaflet satellite imagery tile template and attribution |
 | `LISTINGS_REQUIRE_APPROVAL` | Keep new listings pending for admin review (`true` by default) |

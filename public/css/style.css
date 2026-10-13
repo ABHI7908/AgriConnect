@@ -473,6 +473,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .login-browse-link { display: inline-flex; align-items: center; gap: .5rem; margin-top: 1.35rem; padding: 0; border: 0; background: none; color: #ffcf55; font: inherit; font-weight: 700; text-align: left; text-decoration: none; cursor: pointer; }
 .login-browse-link:hover { color: #fff; }
 .auth-wrap { grid-area: auth; width: 100%; max-width: 500px; margin: 0 auto; }
+.login-auth-card { padding: clamp(1rem, 3vw, 1.5rem); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper); color: var(--ink); box-shadow: 0 20px 60px rgba(0, 0, 0, .28); }
 .login-auth-card > h1 { color: var(--ink) !important; font-size: 1.85rem !important; }
 .login-auth-card > p { color: var(--muted) !important; }
 .login-auth-card > .segmented { max-width: 100%; }
@@ -514,11 +515,10 @@ body.bg-on { background: transparent; }
 .bg-video video { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; opacity: 0; transition: opacity .8s ease; }
 .bg-video video.ready { opacity: 1; }
 /* Keep app content above the fixed backdrop; overlays soften the video without washing it out. */
-.bg-shade { position: fixed; inset: 0; z-index: 1; background: rgba(243, 245, 238, .48); }
+.bg-shade { position: fixed; inset: 0; z-index: 1; background: rgba(243, 245, 238, .84); }
 body.bg-on > :not(.bg-video):not(.bg-shade):not(.site-header) { position: relative; z-index: 2; }
-body.page-dark .bg-shade { background: linear-gradient(180deg, rgba(10, 34, 22, .2), rgba(10, 34, 22, .48)); }
-body.admin-page .bg-shade { background: rgba(243, 245, 238, .22); }
-body.page-dark .hero h1, body.page-dark .hero .lede, body.page-dark .auth-wrap > h1, body.page-dark .auth-wrap > p { color: #fff; }
+body.page-dark .bg-shade { background: linear-gradient(180deg, rgba(5, 17, 10, .68), rgba(5, 17, 10, .78)); }
+body.page-dark .hero h1, body.page-dark .hero .lede { color: #fff; }
 body.page-dark .hero .lede { color: #e1ede4; }
 body.page-dark .loc-status { color: #e1ede4; }
 body.page-dark main > section:not(.hero) { background: var(--field); border-radius: var(--r-md) var(--r-md) 0 0; padding-bottom: 1.5rem; }
@@ -611,9 +611,8 @@ input, select, textarea { min-width: 0; }
   .login-feature small { font-size: .84rem; }
 }
 
-:root[data-theme='dark'] .bg-shade { background: rgba(5, 12, 8, .52); }
-:root[data-theme='dark'] body.page-dark .bg-shade { background: linear-gradient(180deg, rgba(2, 9, 5, .28), rgba(2, 9, 5, .52)); }
-:root[data-theme='dark'] body.admin-page .bg-shade { background: rgba(5, 12, 8, .34); }
+:root[data-theme='dark'] .bg-shade { background: rgba(5, 12, 8, .78); }
+:root[data-theme='dark'] body.page-dark .bg-shade { background: linear-gradient(180deg, rgba(2, 9, 5, .76), rgba(2, 9, 5, .84)); }
 :root[data-theme='dark'] .site-header,
 :root[data-theme='dark'] .site-footer { background: var(--paper); color: var(--muted); }
 :root[data-theme='dark'] .brand,

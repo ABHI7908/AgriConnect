@@ -34,6 +34,10 @@ const schema = z.object({
   OTP_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(5),
   OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().min(0).max(600).default(30),
   OTP_MAX_PER_HOUR: z.coerce.number().int().min(1).max(50).default(6),
+  // Circuit breaker against SMS pumping: max OTP SMS sent across ALL numbers per hour (0 disables).
+  OTP_GLOBAL_MAX_PER_HOUR: z.coerce.number().int().min(0).max(1000000).default(500),
+  // Minimum gap between two booking/chat alert SMS to the same phone number (0 disables).
+  ALERT_SMS_MIN_INTERVAL_SECONDS: z.coerce.number().int().min(0).max(86400).default(300),
   DEFAULT_COUNTRY_CODE: z.string().regex(/^\+\d{1,3}$/).default('+91'),
 
   SMS_PROVIDER: z.enum(['console', 'twilio', 'msg91']).default('console'),
@@ -56,6 +60,10 @@ const schema = z.object({
   ADMIN_PASSWORD: z.string().optional().default(''),
   DB_MANAGER_EMAIL: z.string().optional().default(''),
   DB_MANAGER_PASSWORD: z.string().optional().default(''),
+  // The database manager can edit any row. It is OFF by default in production and must be enabled explicitly.
+  DB_MANAGER_ENABLED: z.string().optional(),
+  // Comma-separated client IPs allowed to reach the database manager (empty = no IP restriction).
+  DB_MANAGER_ALLOWED_IPS: z.string().optional().default(''),
 
   LISTINGS_REQUIRE_APPROVAL: bool(true),
 });
@@ -70,6 +78,11 @@ if (!parsed.success) {
 
 const env = parsed.data;
 const isProd = env.NODE_ENV === 'production';
+const dbManagerEnabled =
+  env.DB_MANAGER_ENABLED === undefined || env.DB_MANAGER_ENABLED === ''
+    ? !isProd
+    : ['1', 'true', 'yes', 'on'].includes(env.DB_MANAGER_ENABLED.toLowerCase());
+const dbManagerAllowedIps = env.DB_MANAGER_ALLOWED_IPS.split(',').map((ip) => ip.trim()).filter(Boolean);
 
 if (isProd) {
   if (env.TRUST_PROXY === 0) {
@@ -87,14 +100,20 @@ if (isProd) {
     problems.push('MSG91 credentials are incomplete');
   }
   if (env.ADMIN_PASSWORD && /change/i.test(env.ADMIN_PASSWORD)) problems.push('ADMIN_PASSWORD still has the placeholder value');
-  if (!env.DB_MANAGER_EMAIL || !env.DB_MANAGER_PASSWORD) {
-    problems.push('DB_MANAGER_EMAIL and DB_MANAGER_PASSWORD are required');
-  }
-  if (env.DB_MANAGER_PASSWORD.length < 16) {
-    problems.push('DB_MANAGER_PASSWORD must be at least 16 characters');
-  }
-  if (/change-me|change-this|replace-with|placeholder/i.test(env.DB_MANAGER_PASSWORD)) {
-    problems.push('DB_MANAGER_PASSWORD still has a placeholder value');
+  if (dbManagerEnabled) {
+    if (!env.DB_MANAGER_EMAIL || !env.DB_MANAGER_PASSWORD) {
+      problems.push('DB_MANAGER_EMAIL and DB_MANAGER_PASSWORD are required when DB_MANAGER_ENABLED=true');
+    }
+    if (env.DB_MANAGER_PASSWORD.length < 16) {
+      problems.push('DB_MANAGER_PASSWORD must be at least 16 characters');
+    }
+    if (/change-me|change-this|replace-with|placeholder/i.test(env.DB_MANAGER_PASSWORD)) {
+      problems.push('DB_MANAGER_PASSWORD still has a placeholder value');
+    }
+    if (!dbManagerAllowedIps.length) {
+      // eslint-disable-next-line no-console
+      console.warn('DB_MANAGER_ENABLED=true without DB_MANAGER_ALLOWED_IPS: the database manager is reachable from any IP.');
+    }
   }
   if (problems.length) {
     // eslint-disable-next-line no-console
@@ -108,6 +127,8 @@ const root = path.resolve(__dirname, '..');
 module.exports = Object.freeze({
   ...env,
   isProd,
+  dbManagerEnabled,
+  dbManagerAllowedIps,
   root,
   sqliteSourcePath: path.resolve(root, env.SQLITE_SOURCE_PATH),
   uploadDir: path.resolve(root, env.UPLOAD_DIR),

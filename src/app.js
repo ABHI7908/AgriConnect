@@ -153,7 +153,13 @@ app.use('/api/bookings', require('./routes/bookings'));
 app.use('/api/communications', require('./routes/communications'));
 app.use('/api/calculator', require('./routes/calculator'));
 app.use('/api/admin', require('./routes/admin'));
-app.use('/api/database-manager', require('./routes/database-manager'));
+if (config.dbManagerEnabled) {
+  app.use('/api/database-manager', (req, res, next) => {
+    const allowed = config.dbManagerAllowedIps;
+    if (allowed.length && !allowed.includes(req.ip)) return notFoundHandler(req, res, next);
+    return next();
+  }, require('./routes/database-manager'));
+}
 
 app.use(notFoundHandler);
 app.use(errorHandler);
