@@ -1,16 +1,16 @@
 // Minimal service worker: lets the app install and keeps the shell (CSS/JS/fonts/icons) fast and available offline.
 // API calls, uploads and the background video are never cached.
-const VERSION = 'v16';
+const VERSION = 'v19';
 const CACHE = `agri-shell-${VERSION}`;
 const SHELL = [
-  '/', '/login', '/calculator', '/farmer', '/owner', '/admin', '/database-manager',
+  '/', '/login', '/calculator', '/farmer', '/owner', '/chats', '/admin', '/database-manager',
   '/manifest.webmanifest', '/favicon.svg', '/apple-touch-icon.png',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-maskable-512.png',
   '/css/style.css', '/vendor/leaflet/leaflet.css', '/vendor/leaflet/leaflet.js',
-  '/js/index.js', '/js/login.js', '/js/calculator.js', '/js/farmer.js', '/js/owner.js',
+  '/js/index.js', '/js/login.js', '/js/calculator.js', '/js/farmer.js', '/js/owner.js', '/js/chats.js',
   '/js/admin.js', '/js/database-manager.js',
   '/js/lib/api.js', '/js/lib/backdrop.js', '/js/lib/bookings-ui.js', '/js/lib/dom.js',
-  '/js/lib/geo.js', '/js/lib/listing-ui.js', '/js/lib/map.js', '/js/lib/navigation.js', '/js/lib/preferences.js', '/js/lib/session.js', '/js/lib/tabs.js',
+  '/js/lib/geo.js', '/js/lib/listing-ui.js', '/js/lib/map.js', '/js/lib/navigation.js', '/js/lib/notifications.js', '/js/lib/preferences.js', '/js/lib/session.js', '/js/lib/tabs.js',
 ];
 
 self.addEventListener('install', (e) => {

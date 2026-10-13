@@ -28,6 +28,10 @@ export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel
 
 /** Set an element's content from html`` output, an array of it, or a plain string (escaped). */
 export function setHTML(el, content) {
+  if (content instanceof Node) {
+    el.replaceChildren(content);
+    return;
+  }
   el.innerHTML = render(content);
 }
 

@@ -74,4 +74,53 @@ async function sendOtpSms(phone, code) {
   }
 }
 
-module.exports = { sendOtpSms };
+async function sendNotificationSms(phone) {
+  if (config.NODE_ENV === 'test') return;
+  if (config.SMS_PROVIDER === 'console') {
+    // eslint-disable-next-line no-console
+    console.log(`[sms:console] AgriConnect booking notification queued for ${maskPhone(phone)}.`);
+    return;
+  }
+
+  if (config.SMS_PROVIDER === 'twilio') {
+    const { TWILIO_ACCOUNT_SID: sid, TWILIO_AUTH_TOKEN: token, TWILIO_FROM: from } = config;
+    const body = new URLSearchParams({
+      To: phone,
+      From: from,
+      Body: 'You have a new AgriConnect booking update. Sign in to view your booking or message.',
+    });
+    const res = await postWithTimeout(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Twilio responded ${res.status}: ${text.slice(0, 200)}`);
+    }
+    return;
+  }
+
+  if (config.SMS_PROVIDER === 'msg91' && config.MSG91_NOTIFICATION_TEMPLATE_ID) {
+    const res = await postWithTimeout('https://control.msg91.com/api/v5/flow/', {
+      method: 'POST',
+      headers: { authkey: config.MSG91_AUTH_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        template_id: config.MSG91_NOTIFICATION_TEMPLATE_ID,
+        recipients: [{ mobiles: phone.replace(/^\+/, ''), VAR1: 'You have a new AgriConnect booking update.', VAR2: 'Sign in to view your booking or message.' }],
+      }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.type === 'error') {
+      throw new Error(`MSG91 responded ${res.status}: ${JSON.stringify(json).slice(0, 200)}`);
+    }
+    return;
+  }
+
+  throw new Error('SMS_PROVIDER=msg91 requires MSG91_NOTIFICATION_TEMPLATE_ID for booking alerts');
+}
+
+module.exports = { sendOtpSms, sendNotificationSms };

@@ -156,7 +156,24 @@ async function getTable(name) {
       defaultValue: column.default_value,
       primaryKey: column.primary_key,
     }));
+  if (name === 'users') {
+    columns.push({
+      name: 'password_status',
+      type: 'text',
+      nullable: false,
+      writable: false,
+      defaultValue: null,
+      primaryKey: false,
+    });
+  }
   return { ...table, columns };
+}
+
+function selectColumn(name, column) {
+  if (name === 'users' && column.name === 'password_status') {
+    return `CASE WHEN "password_hash" IS NOT NULL AND "password_hash" <> '' THEN 'Set (bcrypt hash)' ELSE 'Not set' END AS "password_status"`;
+  }
+  return `"${column.name}"`;
 }
 
 function listPredicate(table, query) {
@@ -241,7 +258,7 @@ router.get('/session', (req, res) => {
 
 router.get('/tables', (req, res) => {
   res.json({
-    items: Object.entries(tables).map(([name, table]) => ({ name, label: table.label })),
+    items: Object.entries(tables).map(([name, table]) => ({ name, label: table.label, readOnly: Boolean(table.readOnly) })),
   });
 });
 
@@ -251,7 +268,7 @@ router.get('/:table/export', async (req, res, next) => {
     const query = z.string().trim().max(100).catch('').parse(req.query.q);
     const { where, args } = listPredicate(table, query);
     const rows = await db.prepare(
-      `SELECT ${table.columns.map((column) => `"${column.name}"`).join(', ')}
+      `SELECT ${table.columns.map((column) => selectColumn(req.params.table, column)).join(', ')}
          FROM "${req.params.table}" ${where} ORDER BY "id" DESC LIMIT 50001`
     ).all(...args);
     if (rows.length > 50000) {
@@ -289,10 +306,10 @@ router.get('/:table/rows', async (req, res, next) => {
     if (!parsedQuery.success) throw badRequest('Invalid table search or page settings');
     const query = parsedQuery.data;
     const { where, args } = listPredicate(table, query.q);
-    const quotedColumns = table.columns.map((column) => `"${column.name}"`).join(', ');
+    const selectedColumns = table.columns.map((column) => selectColumn(req.params.table, column)).join(', ');
     const total = (await db.prepare(`SELECT COUNT(*) AS n FROM "${req.params.table}" ${where}`).get(...args)).n;
     const items = await db.prepare(
-      `SELECT ${quotedColumns} FROM "${req.params.table}" ${where}
+      `SELECT ${selectedColumns} FROM "${req.params.table}" ${where}
        ORDER BY "id" DESC LIMIT ? OFFSET ?`
     ).all(...args, query.pageSize, (query.page - 1) * query.pageSize);
     res.json({

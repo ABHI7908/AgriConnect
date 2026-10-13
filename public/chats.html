@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Chats · AgriConnect</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#143d27">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header id="site-header"></header>
+  <main class="container chats-page">
+    <div class="row between chats-title">
+      <div><h1 data-chat-text="Chats">Chats</h1><p class="muted" data-chat-text="Discuss availability, pricing and work details directly with providers.">Discuss availability, pricing and work details directly with providers.</p></div>
+      <label class="chat-language-choice"><span data-chat-text="Chat language">Chat language</span>
+        <select id="chat-language" aria-label="Chat language">
+          <option value="en">English</option>
+          <option value="te">తెలుగు</option>
+          <option value="hi">हिन्दी</option>
+        </select>
+      </label>
+      <a class="btn ghost" data-chat-text="Find services" href="/">Find services</a>
+    </div>
+    <div class="chat-layout">
+      <aside class="chat-sidebar" aria-label="Your conversations">
+        <h2 data-chat-text="Conversations">Conversations</h2>
+        <div id="chat-list" aria-live="polite"><p class="muted" data-chat-text="Loading conversations…">Loading conversations…</p></div>
+      </aside>
+      <section id="chat-current" class="chat-current" aria-live="polite">
+        <div class="chat-empty"><strong data-chat-text="Select a conversation">Select a conversation</strong><p data-chat-text="Open a machine or labour listing and choose “Message provider” to ask a question.">Open a machine or labour listing and choose “Message provider” to ask a question.</p></div>
+      </section>
+    </div>
+  </main>
+  <footer id="site-footer"></footer>
+  <script type="module" src="/js/chats.js"></script>
+</body>
+</html>

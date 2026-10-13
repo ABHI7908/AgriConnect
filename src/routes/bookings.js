@@ -9,6 +9,8 @@ const { requireRole, requireAuth } = require('../middleware/auth');
 const { audit } = require('../utils/audit');
 const { AppError, badRequest, notFound, forbidden, conflict } = require('../utils/errors');
 const S = require('../utils/schemas');
+const { createNotification, sendAlert } = require('../services/notifications');
+const { ensureServiceChat } = require('../services/service-chats');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -16,6 +18,11 @@ router.use(requireAuth);
 const idParams = z.object({ id: S.id });
 const DAY_MS = 86400000;
 const SHARE_CONTACT_STATUSES = ['accepted', 'in_progress', 'completed'];
+const paymentAmount = (amount) => new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  maximumFractionDigits: 0,
+}).format(amount);
 
 /* ------------------------------------------------------------- Helpers */
 
@@ -167,25 +174,51 @@ router.post('/', requireRole('farmer'), validate({ body: createBody }), async (r
     .get(req.user.id, b.toolId ?? 0, b.labourId ?? 0, b.endDate, b.startDate);
   if (duplicate) throw conflict('You already have a pending request for these dates');
 
-  const info = await db
-    .prepare(
-      `INSERT INTO bookings (kind, farmer_id, owner_id, tool_id, labour_id, item_title, start_date, end_date,
-              land_acres, work_address, work_lat, work_lng, notes, quoted_amount)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      b.kind, req.user.id, ownerId, b.toolId ?? null, b.labourId ?? null, title, b.startDate, b.endDate,
-      b.landAcres ?? null, b.workAddress ?? null, b.workLat ?? null, b.workLng ?? null, b.notes ?? null, quoted
+  const bookingId = await db.transaction(async () => {
+    const info = await db
+      .prepare(
+        `INSERT INTO bookings (kind, farmer_id, owner_id, tool_id, labour_id, item_title, start_date, end_date,
+                land_acres, work_address, work_lat, work_lng, notes, quoted_amount)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        b.kind, req.user.id, ownerId, b.toolId ?? null, b.labourId ?? null, title, b.startDate, b.endDate,
+        b.landAcres ?? null, b.workAddress ?? null, b.workLat ?? null, b.workLng ?? null, b.notes ?? null, quoted
+      );
+    const serviceChat = await ensureServiceChat({
+      farmerId: req.user.id,
+      ownerId,
+      kind: b.kind,
+      listingId: b.kind === 'tool' ? b.toolId : b.labourId,
+    });
+    await db.prepare(
+      'INSERT INTO service_chat_messages (chat_id, sender_id, body, is_system) VALUES (?, NULL, ?, 1)'
+    ).run(
+      serviceChat.id,
+      `Booking request raised for ${title}.${quoted == null ? '' : ` Estimated amount: ${paymentAmount(quoted)}.`}`
     );
+    await createNotification({
+      recipientId: ownerId,
+      actorId: req.user.id,
+      bookingId: info.lastInsertRowid,
+      chatId: serviceChat.id,
+      kind: 'booking_request',
+      title: 'New booking request',
+      body: `A farmer requested ${title}.`,
+    });
+    return info.lastInsertRowid;
+  })();
 
-  audit(req, 'booking.created', { entity: 'booking', entityId: info.lastInsertRowid, meta: { kind: b.kind, title } });
-  res.status(201).json({ booking: bookingDto(await loadBooking(info.lastInsertRowid), 'farmer') });
+  const booking = await loadBooking(bookingId);
+  sendAlert(booking.owner_phone);
+  audit(req, 'booking.created', { entity: 'booking', entityId: bookingId, meta: { kind: b.kind, title } });
+  res.status(201).json({ booking: bookingDto(booking, 'farmer') });
 });
 
 /* --------------------------------------------------------------- List */
 
 const listQuery = z.object({
-  status: z.enum(BOOKING_STATUSES).optional(),
+  status: z.enum([...BOOKING_STATUSES, 'active', 'history']).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
 });
@@ -195,7 +228,11 @@ router.get('/', requireRole('farmer', 'owner'), validate({ query: listQuery }), 
   const col = req.user.role === 'farmer' ? 'b.farmer_id' : 'b.owner_id';
   const where = [`${col} = ?`];
   const args = [req.user.id];
-  if (status) {
+  if (status === 'active') {
+    where.push("b.status IN ('requested', 'accepted', 'in_progress')");
+  } else if (status === 'history') {
+    where.push("b.status IN ('completed', 'rejected', 'cancelled')");
+  } else if (status) {
     where.push('b.status = ?');
     args.push(status);
   }
@@ -306,6 +343,17 @@ router.patch(
       throw new AppError(409, `A booking that is "${row.status}" cannot be changed to "${status}"`, 'BAD_TRANSITION');
     }
 
+    const recipientId = req.user.role === 'farmer' ? row.owner_id : row.farmer_id;
+    const recipientPhone = req.user.role === 'farmer' ? row.owner_phone : row.farmer_phone;
+    const actorName = req.user.business_name || req.user.name || (req.user.role === 'farmer' ? 'Farmer' : 'Provider');
+    const amount = status === 'completed' ? (finalAmount ?? row.final_amount ?? row.quoted_amount) : null;
+    const statusTitle = {
+      accepted: 'Booking accepted',
+      rejected: 'Booking rejected',
+      in_progress: 'Work started',
+      completed: 'Work completed',
+      cancelled: 'Booking cancelled',
+    }[status];
     const applyStatus = async () => {
       const result = await db.prepare(
         `UPDATE bookings SET status = ?,
@@ -316,6 +364,42 @@ router.patch(
       ).run(status, status, finalAmount ?? null, status, row.id, row.status);
       if (result.changes !== 1) {
         throw new AppError(409, 'This booking was just updated by someone else. Please refresh.', 'BAD_TRANSITION');
+      }
+      const chat = await ensureServiceChat({
+        farmerId: row.farmer_id,
+        ownerId: row.owner_id,
+        kind: row.kind,
+        listingId: row.kind === 'tool' ? row.tool_id : row.labour_id,
+      });
+      const eventText = status === 'completed'
+        ? `Work completed for ${row.item_title}.`
+        : `${statusTitle} for ${row.item_title}.`;
+      await db.prepare(
+        'INSERT INTO service_chat_messages (chat_id, sender_id, body, is_system) VALUES (?, NULL, ?, 1)'
+      ).run(chat.id, eventText);
+      await createNotification({
+        recipientId,
+        actorId: req.user.id,
+        bookingId: row.id,
+        chatId: chat.id,
+        kind: 'booking_status',
+        title: statusTitle,
+        body: `${actorName} ${status === 'completed' ? 'marked the work completed' : `updated the booking to ${status.replace(/_/g, ' ')}`} for ${row.item_title}.`,
+      });
+      if (status === 'completed' && amount != null) {
+        const paymentText = `Final payment recorded for ${row.item_title}: ${paymentAmount(amount)}.`;
+        await db.prepare(
+          'INSERT INTO service_chat_messages (chat_id, sender_id, body, is_system) VALUES (?, NULL, ?, 1)'
+        ).run(chat.id, paymentText);
+        await createNotification({
+          recipientId,
+          actorId: req.user.id,
+          bookingId: row.id,
+          chatId: chat.id,
+          kind: 'booking_status',
+          title: 'Final payment recorded',
+          body: `${actorName} recorded a final payment of ${paymentAmount(amount)} for ${row.item_title}.`,
+        });
       }
     };
 
@@ -328,9 +412,10 @@ router.patch(
         await applyStatus();
       })();
     } else {
-      await applyStatus();
+      await db.transaction(async () => applyStatus())();
     }
 
+    sendAlert(recipientPhone);
     audit(req, `booking.${status}`, { entity: 'booking', entityId: row.id, meta: { from: row.status } });
     res.json({ booking: bookingDto(await loadBooking(row.id), req.user.role) });
   }

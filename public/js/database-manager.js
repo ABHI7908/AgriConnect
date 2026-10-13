@@ -7,7 +7,7 @@ initPreferences(document.querySelector('.header-preferences'), { language: false
 const $ = (selector) => document.querySelector(selector);
 const loginView = $('#login-view');
 const managerView = $('#manager-view');
-const tableSelect = $('#table-select');
+const tableSections = $('#table-sections');
 const records = $('#records');
 const pager = $('#pager');
 const summary = $('#table-summary');
@@ -52,6 +52,19 @@ function updateExport() {
   $('#export').href = `/api/database-manager/${encodeURIComponent(current.table)}/export?${currentQuery()}`;
 }
 
+function selectTable(table) {
+  current.table = table;
+  current.page = 1;
+  const selected = [...tableSections.querySelectorAll('[data-table]')]
+    .find((button) => button.dataset.table === table);
+  $('#selected-table').textContent = selected?.dataset.label || table;
+  summary.textContent = '';
+  tableSections.querySelectorAll('[data-table]').forEach((button) => {
+    button.setAttribute('aria-pressed', String(button === selected));
+  });
+  loadRecords();
+}
+
 function renderPage() {
   const totalPages = Math.max(1, Math.ceil(current.total / current.pageSize));
   pager.innerHTML = `
@@ -69,38 +82,78 @@ function renderRecords() {
     records.innerHTML = '<div class="empty"><h3>No records found</h3></div>';
     return;
   }
-  const headers = current.columns.map((column) => `<th scope="col">${escapeHtml(column.name)}</th>`).join('');
-  const rows = current.items.map((item) => `
-    <tr>
-      ${current.columns.map((column) => {
+  const idColumn = current.columns.find((column) => column.primaryKey)?.name || 'id';
+  const titleColumns = ['name', 'business_name', 'item_title', 'title', 'label', 'crop', 'action', 'entity', 'filename'];
+  const subtitleColumns = ['email', 'phone', 'category', 'skill', 'kind', 'actor_role'];
+  const cards = current.items.map((item) => {
+    const titleColumn = titleColumns.find((name) => item[name]);
+    const subtitleColumn = subtitleColumns.find((name) => item[name] && name !== titleColumn);
+    const title = titleColumn ? item[titleColumn] : `Record #${item[idColumn]}`;
+    const subtitle = subtitleColumn ? `${subtitleColumn.replaceAll('_', ' ')}: ${item[subtitleColumn]}` : '';
+    const tagColumn = ['status', 'role'].find((name) => item[name] != null);
+    const fields = current.columns
+      .filter((column) => column.name !== idColumn)
+      .map((column) => {
         const value = item[column.name];
+        let rendered;
         if (current.table === 'tool_images' && column.name === 'filename' && value) {
           const src = `/uploads/${encodeURIComponent(String(value))}`;
-          return `<td><a href="${src}" target="_blank" rel="noreferrer">${escapeHtml(value)}</a><img src="${src}" alt="Listing photo ${escapeHtml(value)}" loading="lazy" style="display:block;width:96px;height:64px;object-fit:cover;margin-top:.35rem;border-radius:4px"></td>`;
+          rendered = `<a href="${src}" target="_blank" rel="noreferrer">${escapeHtml(value)}</a><img src="${src}" alt="Listing photo ${escapeHtml(value)}" loading="lazy" style="display:block;width:128px;height:88px;object-fit:cover;margin-top:.4rem;border-radius:4px">`;
+        } else if (value === null || value === undefined || value === '') {
+          rendered = '<span class="muted">—</span>';
+        } else if (typeof value === 'string') {
+          let structured;
+          try { structured = JSON.stringify(JSON.parse(value), null, 2); } catch { structured = null; }
+          if (structured) {
+            rendered = `<details class="db-value-details"><summary>View structured data</summary><pre>${escapeHtml(structured)}</pre></details>`;
+          } else if (value.length > 180) {
+            rendered = `<details class="db-value-details"><summary>Show full value</summary><pre>${escapeHtml(value)}</pre></details>`;
+          } else {
+            rendered = escapeHtml(value);
+          }
+        } else {
+          rendered = escapeHtml(value);
         }
-        return `<td>${escapeHtml(value)}</td>`;
-      }).join('')}
-      <td><div class="db-actions">
-        ${current.readOnly ? '' : `<button type="button" class="btn ghost small" data-edit="${item.id}">Edit</button><button type="button" class="btn danger small" data-delete="${item.id}">Delete</button>`}
-      </div></td>
-    </tr>`).join('');
-  records.innerHTML = `<div class="db-table-wrap"><table><thead><tr>${headers}<th scope="col">Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+        return `<div class="db-record-field"><dt>${escapeHtml(column.name.replaceAll('_', ' '))}</dt><dd>${rendered}</dd></div>`;
+      }).join('');
+    return `<article class="db-record">
+      <div class="db-record-head">
+        <div>
+          <div class="db-record-meta"><span>Record #${escapeHtml(item[idColumn])}</span>${subtitle ? `<span>${escapeHtml(subtitle)}</span>` : ''}${tagColumn ? `<span class="db-record-tag">${escapeHtml(item[tagColumn])}</span>` : ''}</div>
+          <h3>${escapeHtml(title)}</h3>
+        </div>
+        <div class="db-record-actions">
+          ${current.readOnly ? '' : `<button type="button" class="btn ghost small" data-edit="${escapeHtml(item[idColumn])}">Edit</button><button type="button" class="btn danger small" data-delete="${escapeHtml(item[idColumn])}">Delete</button>`}
+        </div>
+      </div>
+      <details class="db-record-details">
+        <summary>View all fields (${current.columns.length - 1})</summary>
+        <dl class="db-record-fields">${fields}</dl>
+      </details>
+    </article>`;
+  }).join('');
+  records.innerHTML = `<div class="db-record-list">${cards}</div>`;
   records.querySelectorAll('[data-edit]').forEach((button) => button.addEventListener('click', () => editRecord(Number(button.dataset.edit))));
   records.querySelectorAll('[data-delete]').forEach((button) => button.addEventListener('click', () => deleteRecord(Number(button.dataset.delete))));
 }
 
 async function loadRecords() {
+  const table = current.table;
+  const page = current.page;
+  const queryText = search.value.trim();
   showError($('#manager-error'));
   records.innerHTML = '<div class="skeleton" style="min-height:120px"></div>';
   updateExport();
   try {
-    const query = new URLSearchParams({ q: search.value.trim(), page: String(current.page), pageSize: String(current.pageSize) });
-    const data = await request(`/${encodeURIComponent(current.table)}/rows?${query}`);
+    const query = new URLSearchParams({ q: queryText, page: String(page), pageSize: String(current.pageSize) });
+    const data = await request(`/${encodeURIComponent(table)}/rows?${query}`);
+    if (table !== current.table || page !== current.page || queryText !== search.value.trim()) return;
     current = { ...current, ...data, table: data.table.name, columns: data.table.columns, readOnly: data.table.readOnly };
     summary.textContent = `${data.total.toLocaleString()} records · ${data.table.label}${data.table.readOnly ? ' · read only' : ''}`;
     renderRecords();
     renderPage();
   } catch (err) {
+    if (table !== current.table || page !== current.page || queryText !== search.value.trim()) return;
     records.innerHTML = '';
     showError($('#manager-error'), err.message);
   }
@@ -165,10 +218,20 @@ async function showManager() {
   loginView.classList.add('hidden');
   managerView.classList.remove('hidden');
   const data = await request('/tables');
-  tableSelect.innerHTML = data.items.map((item) =>
-    `<option value="${escapeHtml(item.name)}">${escapeHtml(item.label)}</option>`).join('');
-  current.table = tableSelect.value;
-  await loadRecords();
+  tableSections.innerHTML = data.items.map((item) =>
+    `<button class="db-section" type="button" id="table-${escapeHtml(item.name)}" aria-controls="records" aria-pressed="false" data-table="${escapeHtml(item.name)}" data-label="${escapeHtml(item.label)}">
+      <span>${escapeHtml(item.label)}</span>${item.readOnly ? '<span class="db-section-readonly">Read only</span>' : ''}
+    </button>`).join('');
+  tableSections.querySelectorAll('[data-table]').forEach((button) => {
+    button.addEventListener('click', () => selectTable(button.dataset.table));
+  });
+  if (!data.items.length) {
+    $('#selected-table').textContent = '';
+    records.innerHTML = '<div class="empty"><h3>No database tables are available</h3></div>';
+    return;
+  }
+  const initialTable = data.items.find((item) => item.name === current.table) || data.items[0];
+  selectTable(initialTable.name);
 }
 
 $('#login-form').addEventListener('submit', async (event) => {
@@ -198,12 +261,6 @@ $('#logout').addEventListener('click', async () => {
     managerView.classList.add('hidden');
     loginView.classList.remove('hidden');
   }
-});
-
-tableSelect.addEventListener('change', () => {
-  current.table = tableSelect.value;
-  current.page = 1;
-  loadRecords();
 });
 
 search.addEventListener('input', () => {

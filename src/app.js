@@ -150,6 +150,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/tools', require('./routes/tools'));
 app.use('/api/labour', require('./routes/labour'));
 app.use('/api/bookings', require('./routes/bookings'));
+app.use('/api/communications', require('./routes/communications'));
 app.use('/api/calculator', require('./routes/calculator'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/database-manager', require('./routes/database-manager'));

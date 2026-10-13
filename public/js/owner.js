@@ -307,7 +307,10 @@ function renderProfile() {
 
 /* ------------------------------------------------------------------ Boot */
 let tabsApi;
-mountBookingList($('#panel-requests'), 'owner', { initialStatus: '' });
+const bookingView = new URLSearchParams(location.search).get('bookings');
+mountBookingList($('#panel-requests'), 'owner', {
+  initialStatus: bookingView === 'active' || bookingView === 'history' ? bookingView : '',
+});
 tabsApi = mountTabs($('#tabs'), [
   { id: 'requests', label: 'Requests' }, { id: 'machines', label: 'My machines' }, { id: 'labour', label: 'Labour teams' },
   { id: 'customers', label: 'Customers' }, { id: 'profile', label: 'Profile' },

@@ -92,7 +92,10 @@ function renderProfile() {
   });
 }
 
-mountBookingList($('#panel-bookings'), 'farmer');
+const bookingView = new URLSearchParams(location.search).get('bookings');
+mountBookingList($('#panel-bookings'), 'farmer', {
+  initialStatus: bookingView === 'active' || bookingView === 'history' ? bookingView : '',
+});
 mountTabs($('#tabs'), [
   { id: 'bookings', label: 'My requests' }, { id: 'history', label: 'Services used' },
   { id: 'saved', label: 'Saved calculations' }, { id: 'profile', label: 'Profile' },

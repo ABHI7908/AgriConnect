@@ -2,6 +2,7 @@ import { api } from './api.js';
 import { esc } from './dom.js';
 import { setupApp } from './backdrop.js';
 import { initNavigation } from './navigation.js';
+import { initNotificationCenter } from './notifications.js';
 import { initPreferences } from './preferences.js';
 
 let userPromise;
@@ -35,17 +36,41 @@ export function renderHeader(user, { showMenu = true } = {}) {
     let items = '';
     if (!user) items = `<a class="btn small nav-account-link" href="/login"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg><span>Log in / Sign up</span></a>`;
     if (user) {
-      items = `<span class="who">${esc(user.name || user.phone || user.email || '')}</span>` +
-        (user.role === 'farmer' || user.role === 'owner'
-          ? `<a class="nav-feature-link" href="/calculator"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"></rect><path d="M8 7h8M8 11h2m4 0h2m-8 4h2m4 0h2m-8 4h2m4 0h2"></path></svg><span>Land &amp; Yield Calculator</span></a>`
-          : '') +
-        `<button class="link" type="button" data-logout>Log out</button>`;
+      const identity = `<span class="who">${esc(user.name || user.phone || user.email || '')}</span>`;
+      if (user.role === 'farmer') {
+        items = identity +
+          `<a href="/farmer#bookings">My farm dashboard</a>` +
+          `<a href="/farmer?bookings=active#bookings">Active bookings</a>` +
+          `<a href="/farmer?bookings=history#bookings">Past bookings</a>` +
+          `<a href="/chats">Chats</a>` +
+          `<a href="/farmer#saved">Saved calculations</a>` +
+          `<a href="/calculator">Land &amp; yield calculator</a>` +
+          `<a href="/farmer#profile">My profile</a>` +
+          `<button class="link" type="button" data-logout>Sign out</button>`;
+      } else if (user.role === 'owner') {
+        items = identity +
+          `<a href="/owner#requests">My business dashboard</a>` +
+          `<a href="/owner?bookings=active#requests">Active bookings</a>` +
+          `<a href="/owner?bookings=history#requests">Past bookings</a>` +
+          `<a href="/chats">Chats</a>` +
+          `<a href="/owner#machines">My machines</a>` +
+          `<a href="/owner#labour">Labour teams</a>` +
+          `<a href="/owner#customers">Customers served</a>` +
+          `<a href="/calculator">Land &amp; yield calculator</a>` +
+          `<a href="/owner#profile">My profile</a>` +
+          `<button class="link" type="button" data-logout>Sign out</button>`;
+      } else {
+        items = identity + `<button class="link" type="button" data-logout>Sign out</button>`;
+      }
     }
     menu = `<button class="nav-toggle" type="button" data-menu-toggle aria-expanded="false" aria-controls="main-navigation"><span class="nav-toggle-icon" aria-hidden="true"><span></span><span></span><span></span></span><span>Menu</span></button><nav class="nav" id="main-navigation" aria-label="Main">${items}</nav>`;
   }
 
   host.className = 'site-header';
-  host.innerHTML = `<div class="container"><a class="brand" href="/">${LOGO}<span>AgriConnect</span></a><div class="header-preferences"></div>${menu}</div>`;
+  host.innerHTML = `<div class="container"><a class="brand" href="/">${LOGO}<span>AgriConnect</span></a><div class="header-preferences"></div><div class="header-alerts"></div>${menu}</div>`;
+  if (user && (user.role === 'farmer' || user.role === 'owner')) {
+    initNotificationCenter(host.querySelector('.header-alerts'), user.role);
+  }
   if (showMenu) {
     initNavigation(host);
     initPreferences(host.querySelector('.header-preferences'));

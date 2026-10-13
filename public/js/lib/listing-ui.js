@@ -32,6 +32,15 @@ function mapsLink(item) {
   return html`<a class="btn small ghost open-map" href="https://www.google.com/maps/dir/?api=1&destination=${destination}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>`;
 }
 
+function messageProviderLink(kind, item, user) {
+  if (user?.role && user.role !== 'farmer') return '';
+  const query = new URLSearchParams({ kind, listingId: String(item.id) });
+  const href = user?.role === 'farmer'
+    ? `/chats?${query}`
+    : `/login?role=farmer&next=${encodeURIComponent(`/chats?${query}`)}`;
+  return html`<a class="btn ghost" href="${href}">Message ${kind === 'tool' ? 'owner' : 'provider'}</a>`;
+}
+
 /* ----------------------------------------------------------------- Cards */
 
 export function toolCard(t, meta) {
@@ -188,7 +197,7 @@ export async function openToolDetail(id, user) {
         ${mapsLink(t)}
         ${t.description ? html`<p>${t.description}</p>` : ''}
         ${t.status !== 'approved' ? html`<p class="form-note">This listing is <strong>${t.status}</strong> and is not visible to farmers yet.</p>` : ''}
-        ${t.status === 'approved' ? bookingFormHTML('tool', t, user) : ''}
+        ${t.status === 'approved' ? html`<div class="row listing-contact-actions">${messageProviderLink('tool', t, user)}</div>${bookingFormHTML('tool', t, user)}` : ''}
       </div>
     </div>
     ${reviews.length ? html`<h3 style="margin-top:1.25rem">Reviews</h3>${reviews.map((r) => html`<div class="review"><span class="stars">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</span> <strong>${r.farmer}</strong> <span class="muted small">${fmtDate(r.date)}</span>${r.review ? html`<p style="margin:.2rem 0 0">${r.review}</p>` : ''}</div>`)}` : ''}`,
@@ -215,7 +224,7 @@ export async function openLabourDetail(id, user) {
       </dl>
       ${mapsLink(l)}
       ${l.description ? html`<p>${l.description}</p>` : ''}
-      ${l.status === 'approved' ? bookingFormHTML('labour', l, user) : html`<p class="form-note">This listing is <strong>${l.status}</strong>.</p>`}
+      ${l.status === 'approved' ? html`<div class="row listing-contact-actions">${messageProviderLink('labour', l, user)}</div>${bookingFormHTML('labour', l, user)}` : html`<p class="form-note">This listing is <strong>${l.status}</strong>.</p>`}
     </div>`,
   });
   wireBooking(m.body, 'labour', l, user, m.close);

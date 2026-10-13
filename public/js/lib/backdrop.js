@@ -43,12 +43,21 @@ export function setupApp() {
       v.append(src);
     });
     wrap.append(v);
-    const play = () => v.play().catch(() => { /* low-power mode etc.: the poster stays visible */ });
-    v.addEventListener('canplay', () => { play(); v.classList.add('ready'); }, { once: true });
+    const play = () => {
+      if (document.hidden || v.error) return;
+      v.play().catch(() => { /* The poster remains visible if autoplay is blocked. */ });
+    };
+    const retryPlay = () => play();
+    v.addEventListener('canplay', play, { once: true });
+    v.addEventListener('playing', () => {
+      v.classList.add('ready');
+      window.removeEventListener('pointerdown', retryPlay);
+    }, { once: true });
+    v.addEventListener('error', () => v.classList.remove('ready'));
     // Save battery: stop decoding while the tab is hidden.
     document.addEventListener('visibilitychange', () => (document.hidden ? v.pause() : play()));
     // iOS may block autoplay until the first touch.
-    window.addEventListener('pointerdown', play, { once: true, passive: true });
+    window.addEventListener('pointerdown', retryPlay, { passive: true });
   }
 
   const shade = document.createElement('div');

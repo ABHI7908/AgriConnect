@@ -31,6 +31,13 @@ The application includes a web app for desktop and mobile browsers, an Expo Go m
 - Find listings near the device's GPS location or a point selected by tapping or dragging on the map.
 - View listing details, owner/provider information, prices, photos, ratings, and reviews.
 - Request, track, cancel, and review bookings. Owner contact details are shared after a booking is accepted.
+- Receive booking-status and new-message notifications; chat with the other participant within a booking.
+- Start a private chat from an approved machine or labour listing before booking to discuss availability, prices, dates, and work requirements.
+- Open a booking notification directly into the same private service chat. A new conversation starts with an automatic AgriConnect welcome message.
+- See booking-request, acceptance, work-start, completion, and final-payment updates in the chat timeline; dashboard notifications identify completion and final payment separately and link to that conversation.
+- Choose English, Telugu, or Hindi for each message; messages stay in the language they were sent in and display that language in the conversation.
+- Send voice notes from the Chats page (up to 60 seconds each) and play them in the conversation.
+- Use the Chats page to follow replies. Direct calling between farmer and provider is enabled only after a booking for that listing is accepted.
 - View service history, providers used, completed work, and spending.
 - Measure land by walking its boundary with GPS or drawing the boundary on satellite imagery.
 - Estimate crop quantities, bags, and indicative revenue, or compare a harvested amount with the estimate.
@@ -42,6 +49,8 @@ The application includes a web app for desktop and mobile browsers, an Expo Go m
 - Publish farm-labour teams with skill, team size, daily wage, location, and service area.
 - Edit listings, update availability, and view admin approval status or moderation notes.
 - Receive and manage booking requests, update their status through the booking lifecycle, and review customer/service history.
+- Receive new-request and message notifications that open the relevant farmer conversation, and communicate with each farmer in the booking conversation.
+- Reply to listing enquiries in the Chats page and coordinate availability, pricing, and work details before a booking is accepted.
 - Maintain a business profile and location.
 
 New listings require admin approval by default. This behavior is controlled by `LISTINGS_REQUIRE_APPROVAL`.
@@ -311,6 +320,7 @@ The complete template and comments are in `.env.example`.
 | `OTP_LENGTH`, `OTP_TTL_SECONDS`, `OTP_MAX_ATTEMPTS`, `OTP_RESEND_COOLDOWN_SECONDS`, `OTP_MAX_PER_HOUR` | OTP policy and rate bounds |
 | `SMS_PROVIDER` | `console`, `twilio`, or `msg91` |
 | `TWILIO_*`, `MSG91_*` | Credentials/template configuration for the selected SMS provider |
+| `MSG91_NOTIFICATION_TEMPLATE_ID` | Optional approved MSG91 Flow template with `VAR1` and `VAR2` for booking/message SMS alerts |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Admin account ensured during startup |
 | `DB_MANAGER_EMAIL`, `DB_MANAGER_PASSWORD` | Separate database-manager login |
 | `MAP_STREET_TILE_URL`, `MAP_STREET_ATTRIBUTION` | Leaflet street-map tile template and attribution |
@@ -363,6 +373,7 @@ All APIs are under `/api`. State-changing browser API calls require the app's cu
 | `/api/tools` | Search/detail, owner machine CRUD, availability, photo management |
 | `/api/labour` | Search/detail, provider listing CRUD and availability |
 | `/api/bookings` | Create/list/detail, summaries, allowed status transitions, review |
+| `/api/communications` | Notifications, booking messages, and private farmer/provider service chats |
 | `/api/calculator` | Crop list, yield calculation, polygon measurement, farmer saved calculations |
 | `/api/admin` | Admin stats, moderation, user management, bookings/audit, crop maintenance |
 | `/api/database-manager` | Separate database-manager session, table listing/search, record edit/delete, CSV export |
@@ -377,7 +388,9 @@ Validation is applied to route inputs with Zod schemas. The server responds with
 - User sessions are JWTs in `httpOnly`, `SameSite` cookies. Password resets and account blocks invalidate existing sessions.
 - State-changing API requests require a custom header as a CSRF defense. Sensitive endpoints also enforce authentication and role checks.
 - Helmet security headers, a restrictive content security policy, rate limits, request validation, and upload byte-signature validation are enabled.
+- Login and OTP endpoints use dedicated limits rather than the general API request budget. Password/admin login limits are scoped to the account and client IP and count failed logins only, so successful sign-ins and normal background API polling do not lock users out; OTP delivery and verification limits remain in force.
 - Listing images are stored as PostgreSQL `BYTEA` and served with safe content headers. The database manager does not return raw image bytes.
+- Booking messages and service chats are visible only to their farmer/provider participants. Farmers can start a service chat from an approved machine or labour listing before booking. Text and voice messages record the selected English, Telugu, or Hindi language but are not automatically translated. Voice notes are limited to 60 seconds in the browser and 3 MB on upload. Both participants' phone numbers remain hidden in service chats until a booking for that listing is accepted; then either participant can tap to call. SMS alerts contain a generic sign-in prompt, never message content. In-app notifications and open chats refresh while the app is active; MSG91 SMS alerts require a separately approved Flow template.
 - Configure HTTPS in production, restrict database network access, keep backups private, and review audit records.
 
 ## Tests and demo data

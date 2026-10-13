@@ -251,6 +251,18 @@ async function main() {
   check('wrong admin password rejected', badAdmin.status === 401);
   const adminLogin = await admin.post('/api/auth/admin/login', { email: 'admin@test.local', password: process.env.ADMIN_PASSWORD });
   check('admin logs in', adminLogin.status === 200 && adminLogin.data.user.role === 'admin');
+  const repeatedAdminLogins = [];
+  for (let attempt = 0; attempt < 11; attempt += 1) {
+    repeatedAdminLogins.push(await admin.post('/api/auth/admin/login', {
+      email: 'admin@test.local',
+      password: process.env.ADMIN_PASSWORD,
+    }));
+  }
+  check(
+    'successful admin logins do not consume the failed-login rate limit',
+    repeatedAdminLogins.every((response) => response.status === 200),
+    repeatedAdminLogins.map((response) => response.status)
+  );
   const asOwner = await owner.get('/api/admin/stats');
   check('non-admin cannot reach admin API', asOwner.status === 403);
   const pending = await admin.get('/api/admin/tools?status=pending');
@@ -282,16 +294,50 @@ async function main() {
   const book = await farmer.post('/api/bookings', { kind: 'tool', toolId, startDate: day(2), endDate: day(3), landAcres: 4, workAddress: 'Kompally farm', notes: 'Need ploughing' });
   check('farmer requests booking with quote', book.status === 201 && book.data.booking.quotedAmount === 5000 && book.data.booking.counterpart.phone === null, book.data);
   const bid = book.data.booking.id;
+  const ownerNotifications = await owner.get('/api/communications/notifications');
+  const bookingChat = await owner.get(`/api/communications/chats/booking/${bid}`);
+  const farmerBookingChat = await farmer.get(`/api/communications/chats/booking/${bid}`);
+  const requestChatMessages = bookingChat.status === 200
+    ? await owner.get(`/api/communications/chats/${bookingChat.data.id}/messages`)
+    : { status: 0, data: { items: [] } };
+  check(
+    'booking message entry resolves the same private chat for both participants',
+    ownerNotifications.status === 200 && ownerNotifications.data.unreadCount === 1 &&
+      ownerNotifications.data.items[0].kind === 'booking_request' &&
+      ownerNotifications.data.items[0].booking_id === bid &&
+      ownerNotifications.data.items[0].chat_id === bookingChat.data.id &&
+      bookingChat.status === 200 && farmerBookingChat.status === 200 &&
+      farmerBookingChat.data.id === bookingChat.data.id &&
+      requestChatMessages.data.items.some((message) => message.isSystem && message.body.includes('Booking request raised'))
+  );
   const dup = await farmer.post('/api/bookings', { kind: 'tool', toolId, startDate: day(2), endDate: day(3) });
   check('duplicate pending request blocked', dup.status === 409);
   const wrongFarmerCancel = await farmer2.patch(`/api/bookings/${bid}/status`, { status: 'cancelled' });
   check('other users cannot touch a booking', wrongFarmerCancel.status === 401);
   const ownerList = await owner.get('/api/bookings?status=requested');
   check('owner sees the request', ownerList.data.total === 1 && ownerList.data.items[0].counterpart.name === 'Suresh Reddy' && ownerList.data.items[0].counterpart.phone === null);
+  const farmerActive = await farmer.get('/api/bookings?status=active');
+  const farmerPast = await farmer.get('/api/bookings?status=history');
+  const ownerActive = await owner.get('/api/bookings?status=active');
+  check('active booking filter includes pending requests for both roles', farmerActive.data.total === 1 && ownerActive.data.total === 1);
+  check('past booking filter excludes pending requests', farmerPast.data.total === 0);
   const badJump = await owner.patch(`/api/bookings/${bid}/status`, { status: 'completed' });
   check('invalid status jump blocked', badJump.status === 409);
   const accept = await owner.patch(`/api/bookings/${bid}/status`, { status: 'accepted' });
+  const acceptedChatMessages = bookingChat.status === 200
+    ? await farmer.get(`/api/communications/chats/${bookingChat.data.id}/messages`)
+    : { status: 0, data: { items: [] } };
   check('owner accepts', accept.status === 200 && accept.data.booking.counterpart.phone === '+919000000002');
+  const farmerNotifications = await farmer.get('/api/communications/notifications');
+  check(
+    'booking acceptance appears in the chat and notification with its type identified',
+    farmerNotifications.status === 200 && farmerNotifications.data.unreadCount === 1 &&
+      farmerNotifications.data.items[0].kind === 'booking_status' &&
+      farmerNotifications.data.items[0].title === 'Booking accepted' &&
+      farmerNotifications.data.items[0].chat_id === bookingChat.data.id &&
+      acceptedChatMessages.status === 200 &&
+      acceptedChatMessages.data.items.some((message) => message.isSystem && message.body.includes('Booking accepted'))
+  );
   const fview = await farmer.get(`/api/bookings/${bid}`);
   check('farmer now sees owner contact', fview.data.booking.counterpart.phone === '+919000000001');
 
@@ -300,14 +346,170 @@ async function main() {
   const f2LoginOtp = await loginWithOtp(farmer2, '9000000003', 'farmer');
   const f2OtpLogin = await f2LoginOtp.verify();
   check('registered secondary farmer signs in using OTP', f2OtpLogin.status === 200);
+  const listingForChat = await farmer2.get(`/api/communications/chats/listing?kind=tool&listingId=${toolId}`);
+  const inquiry = await farmer2.post('/api/communications/chats', {
+    kind: 'tool',
+    listingId: toolId,
+    body: 'Is the tractor available next week, and can you discuss the final per-acre price?',
+    language: 'te',
+  });
+  const serviceChatId = inquiry.status === 201 ? inquiry.data.id : null;
+  const farmerInquiry = inquiry.status === 201
+    ? await farmer2.get(`/api/communications/chats/${serviceChatId}/messages`)
+    : { status: 0, data: {} };
+  check(
+    'farmer can start a pre-booking chat from a machinery listing without exposing the provider phone',
+    listingForChat.status === 200 && inquiry.status === 201 && farmerInquiry.status === 200 &&
+      farmerInquiry.data.chat.callPhone === null && farmerInquiry.data.items.length === 2 &&
+      farmerInquiry.data.items[0].isSystem && farmerInquiry.data.items[0].body.includes('Welcome to AgriConnect') &&
+      farmerInquiry.data.items[1].body.includes('available next week') && farmerInquiry.data.items[1].language === 'te',
+    { listing: listingForChat, inquiry, farmerInquiry }
+  );
+  const providerChats = await owner.get('/api/communications/chats');
+  const providerNotifications = await owner.get('/api/communications/notifications');
+  const providerRead = serviceChatId ? await owner.get(`/api/communications/chats/${serviceChatId}/messages`) : { status: 0, data: {} };
+  const providerCleared = serviceChatId
+    ? await owner.post(`/api/communications/chats/${serviceChatId}/messages/read`, {})
+    : { status: 0, data: {} };
+  check(
+    'provider inbox shows the farmer enquiry and can clear its unread notification',
+    providerChats.status === 200 && providerChats.data.items.some((chat) => chat.id === serviceChatId && chat.unread_count === 1) &&
+      providerNotifications.data.items.some((notification) => notification.kind === 'service_message' && notification.chat_id === serviceChatId) &&
+      providerRead.status === 200 && providerRead.data.items.length === 2 &&
+      providerRead.data.chat.callPhone === null && providerCleared.data.updated === 1,
+    { providerChats, providerNotifications, providerRead, providerCleared }
+  );
+  const foreignServiceChat = serviceChatId
+    ? await farmer.get(`/api/communications/chats/${serviceChatId}/messages`)
+    : { status: 0 };
+  check('service chats are private to the farmer and listing provider', foreignServiceChat.status === 403, foreignServiceChat);
+  const voiceForm = new FormData();
+  voiceForm.append('language', 'hi');
+  voiceForm.append('voice', new Blob([Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x00, 0x01])], { type: 'audio/webm' }), 'voice.webm');
+  const voiceSent = serviceChatId
+    ? await farmer2.send('POST', `/api/communications/chats/${serviceChatId}/voice`, { form: voiceForm })
+    : { status: 0 };
+  const voiceMessages = serviceChatId
+    ? await farmer2.get(`/api/communications/chats/${serviceChatId}/messages`)
+    : { status: 0, data: { items: [] } };
+  const voiceMessage = voiceMessages.data.items.find((message) => message.hasAudio);
+  const voiceAudio = voiceMessage
+    ? await farmer2.get(`/api/communications/chats/${serviceChatId}/messages/${voiceMessage.id}/audio`)
+    : { status: 0, data: new ArrayBuffer(0) };
+  const outsiderAudio = voiceMessage
+    ? await farmer.get(`/api/communications/chats/${serviceChatId}/messages/${voiceMessage.id}/audio`)
+    : { status: 0 };
+  const providerVoiceNotificationsRead = serviceChatId
+    ? await owner.post(`/api/communications/chats/${serviceChatId}/messages/read`, {})
+    : { status: 0 };
+  check(
+    'voice notes are stored with language metadata and playable only by chat participants',
+    voiceSent.status === 201 && voiceMessage?.language === 'hi' &&
+      voiceAudio.status === 200 && voiceAudio.headers.get('content-type') === 'audio/webm' &&
+      Buffer.from(voiceAudio.data).subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3])) &&
+      outsiderAudio.status === 403 && providerVoiceNotificationsRead.status === 200
+  );
+  const invalidVoiceForm = new FormData();
+  invalidVoiceForm.append('voice', new Blob(['not audio'], { type: 'text/plain' }), 'voice.txt');
+  const invalidVoice = serviceChatId
+    ? await farmer2.send('POST', `/api/communications/chats/${serviceChatId}/voice`, { form: invalidVoiceForm })
+    : { status: 0 };
+  check('voice-note upload rejects unsupported MIME types', invalidVoice.status === 400, invalidVoice);
+  const providerReply = serviceChatId ? await owner.post(`/api/communications/chats/${serviceChatId}/messages`, {
+    body: 'It is available. We can discuss the final price based on your field size.',
+    language: 'hi',
+  }) : { status: 0 };
+  const farmerInquiryReply = serviceChatId
+    ? await farmer2.get(`/api/communications/chats/${serviceChatId}/messages`)
+    : { status: 0, data: { items: [] } };
+  const messagesBeforeMarkRead = serviceChatId
+    ? await db.prepare('SELECT COUNT(*) AS count FROM service_chat_messages WHERE chat_id = ?').get(serviceChatId)
+    : { count: 0 };
+  const markAllFarmerNotificationsRead = await farmer2.post('/api/communications/notifications/read-all', {});
+  const farmerNotificationsAfterMarkAllRead = await farmer2.get('/api/communications/notifications');
+  const messagesAfterMarkRead = serviceChatId
+    ? await farmer2.get(`/api/communications/chats/${serviceChatId}/messages`)
+    : { status: 0, data: { items: [] } };
+  const messagesAfterMarkReadCount = serviceChatId
+    ? await db.prepare('SELECT COUNT(*) AS count FROM service_chat_messages WHERE chat_id = ?').get(serviceChatId)
+    : { count: 0 };
+  check(
+    'farmer and provider can continue the pre-booking conversation',
+    providerReply.status === 201 && farmerInquiryReply.status === 200 &&
+      farmerInquiryReply.data.items.length === 4 && farmerInquiryReply.data.items[2].hasAudio &&
+      farmerInquiryReply.data.items[3].isMine === false && farmerInquiryReply.data.items[3].language === 'hi',
+    { providerReply, farmerInquiryReply }
+  );
+  check(
+    'marking all notifications read keeps every text and voice message in the chat history',
+    markAllFarmerNotificationsRead.status === 200 &&
+      farmerNotificationsAfterMarkAllRead.status === 200 &&
+      farmerNotificationsAfterMarkAllRead.data.unreadCount === 0 &&
+      farmerNotificationsAfterMarkAllRead.data.items.every((notification) => notification.read_at) &&
+      messagesAfterMarkRead.status === 200 && messagesAfterMarkRead.data.items.length === 4 &&
+      messagesBeforeMarkRead.count === messagesAfterMarkReadCount.count &&
+      messagesAfterMarkRead.data.items[1].language === 'te' &&
+      messagesAfterMarkRead.data.items[2].hasAudio && messagesAfterMarkRead.data.items[2].language === 'hi' &&
+      messagesAfterMarkRead.data.items[3].language === 'hi'
+  );
+  const outsiderMessages = await farmer2.get(`/api/communications/bookings/${bid}/messages`);
+  check('booking messages are private to the booking participants', outsiderMessages.status === 403);
+  const sentMessage = await farmer.post(`/api/communications/bookings/${bid}/messages`, { body: 'Please confirm the arrival time.' });
+  const ownerMessages = await owner.get(`/api/communications/bookings/${bid}/messages`);
+  const ownerMessageNotifications = await owner.get('/api/communications/notifications');
+  check(
+    'farmer and owner can exchange booking messages',
+    sentMessage.status === 201 && ownerMessages.status === 200 && ownerMessages.data.items.length === 1 &&
+      ownerMessages.data.items[0].body === 'Please confirm the arrival time.' &&
+      ownerMessages.data.items[0].senderRole === 'farmer' && ownerMessageNotifications.data.unreadCount === 2
+  );
+  const markedMessageNotifications = await owner.post(`/api/communications/bookings/${bid}/messages/read`, {});
+  const ownerNotificationsRead = await owner.get('/api/communications/notifications');
+  check(
+    'opening a conversation clears its message notification',
+    markedMessageNotifications.status === 200 && ownerNotificationsRead.data.unreadCount === 1
+  );
+  const ownerReply = await owner.post(`/api/communications/bookings/${bid}/messages`, { body: 'I will arrive at 8 AM.' });
+  const farmerMessages = await farmer.get(`/api/communications/bookings/${bid}/messages`);
+  check(
+    'owner reply is visible to the farmer',
+    ownerReply.status === 201 && farmerMessages.data.items.length === 2 &&
+      farmerMessages.data.items[1].isMine === false && farmerMessages.data.items[1].body === 'I will arrive at 8 AM.'
+  );
+  const unreadOwnerNotification = ownerNotificationsRead.data.items.find((item) => !item.read_at);
+  const readOwnerNotification = await owner.post(`/api/communications/notifications/${unreadOwnerNotification.id}/read`, {});
+  check('notification recipient can mark a notification read', readOwnerNotification.status === 200 && readOwnerNotification.data.updated === 1);
+  const foreignNotificationRead = await farmer2.post(`/api/communications/notifications/${unreadOwnerNotification.id}/read`, {});
+  check('users cannot mark another user notification as read', foreignNotificationRead.status === 200 && foreignNotificationRead.data.updated === 0);
   const clash = await farmer2.post('/api/bookings', { kind: 'tool', toolId, startDate: day(3), endDate: day(4) });
   check('double-booking of a confirmed tool blocked', clash.status === 409);
   const free = await farmer2.post('/api/bookings', { kind: 'tool', toolId, startDate: day(10), endDate: day(10) });
   check('non-overlapping dates are fine', free.status === 201);
+  const rejectFree = await owner.patch(`/api/bookings/${free.data.booking.id}/status`, { status: 'rejected' });
+  const rejectedFarmerNotifications = await farmer2.get('/api/communications/notifications');
+  check(
+    'farmer receives notification when owner rejects a request',
+    rejectFree.status === 200 && rejectedFarmerNotifications.data.items[0].title === 'Booking rejected'
+  );
 
   const start = await owner.patch(`/api/bookings/${bid}/status`, { status: 'in_progress' });
   const done = await owner.patch(`/api/bookings/${bid}/status`, { status: 'completed', finalAmount: 4800 });
-  check('owner starts and completes with final amount', start.status === 200 && done.status === 200 && done.data.booking.finalAmount === 4800);
+  const completedChatMessages = await farmer.get(`/api/communications/chats/${bookingChat.data.id}/messages`);
+  const completedNotifications = await farmer.get('/api/communications/notifications');
+  const completedNotification = completedNotifications.data.items.find((item) => item.title === 'Work completed');
+  const paymentNotification = completedNotifications.data.items.find((item) => item.title === 'Final payment recorded');
+  check(
+    'completion and final payment appear in chat and as distinct notifications',
+    start.status === 200 && done.status === 200 && done.data.booking.finalAmount === 4800 &&
+      completedChatMessages.status === 200 &&
+      completedChatMessages.data.items.some((message) => message.isSystem && message.body.includes('Work completed')) &&
+      completedChatMessages.data.items.some((message) => message.isSystem && message.body.includes('₹4,800')) &&
+      completedNotification?.chat_id === bookingChat.data.id &&
+      paymentNotification?.chat_id === bookingChat.data.id &&
+      paymentNotification.body.includes('₹4,800')
+  );
+  const farmerPastAfterCompletion = await farmer.get('/api/bookings?status=history');
+  check('past booking filter includes completed work', farmerPastAfterCompletion.data.items.some((booking) => booking.id === bid));
   const early = await farmer2.post(`/api/bookings/${free.data.booking.id}/review`, { rating: 5 });
   check('cannot review before completion', early.status === 409);
   const review = await farmer.post(`/api/bookings/${bid}/review`, { rating: 5, review: 'Great work, on time' });
@@ -318,6 +520,29 @@ async function main() {
   check('farmer history: services used & spent', fsum.data.totals.completed === 1 && fsum.data.totals.spent === 4800 && fsum.data.providers[0].services.includes('Mahindra 575 DI'), fsum.data);
   const osum = await owner.get('/api/bookings/summary');
   check('owner history: customers served & earned', osum.data.totals.earned === 4800 && osum.data.customers.length === 1 && osum.data.customers[0].name === 'Suresh Reddy', osum.data);
+  const inquiryBooking = await farmer2.post('/api/bookings', {
+    kind: 'tool', toolId, startDate: day(20), endDate: day(20),
+  });
+  const farmerChatBeforeAcceptance = serviceChatId
+    ? await farmer2.get(`/api/communications/chats/${serviceChatId}/messages`)
+    : { status: 0, data: {} };
+  check('call contact remains hidden while the related booking is only requested',
+    inquiryBooking.status === 201 && farmerChatBeforeAcceptance.data.chat?.callPhone === null);
+  const acceptedInquiryBooking = inquiryBooking.status === 201
+    ? await owner.patch(`/api/bookings/${inquiryBooking.data.booking.id}/status`, { status: 'accepted' })
+    : { status: 0 };
+  const farmerChatAfterAcceptance = serviceChatId
+    ? await farmer2.get(`/api/communications/chats/${serviceChatId}/messages`)
+    : { status: 0, data: {} };
+  const providerChatAfterAcceptance = serviceChatId
+    ? await owner.get(`/api/communications/chats/${serviceChatId}/messages`)
+    : { status: 0, data: {} };
+  check(
+    'direct call becomes available in chat only after provider accepts a booking',
+    acceptedInquiryBooking.status === 200 && farmerChatAfterAcceptance.data.chat?.callPhone === '+919000000001' &&
+      providerChatAfterAcceptance.data.chat?.callPhone === '+919000000003',
+    { acceptedInquiryBooking, farmerChatAfterAcceptance, providerChatAfterAcceptance }
+  );
   const withRating = await anon.get(`/api/tools/${toolId}`);
   check('rating is reflected on the listing', withRating.data.tool.rating.average === 5 && withRating.data.reviews.length === 1);
 
@@ -363,8 +588,14 @@ async function main() {
   check('blocked user cannot request a new OTP', blockedOtp.status === 403);
 
   realLog('\nOwner deleting listing');
+  const openBooking = await farmer2.post('/api/bookings', {
+    kind: 'tool', toolId, startDate: day(15), endDate: day(16),
+  });
   const delBusy = await owner.del(`/api/tools/${toolId}`);
-  check('cannot delete a tool with open bookings', delBusy.status === 409);
+  check('cannot delete a tool with open bookings', openBooking.status === 201 && delBusy.status === 409, {
+    bookingStatus: openBooking.status,
+    deleteStatus: delBusy.status,
+  });
 
   realLog('\nSeparate database manager');
   const dbManager = makeClient(base);
@@ -388,14 +619,17 @@ async function main() {
   check(
     'database manager can search users without exposing password hashes',
     managedUsers.status === 200 && managedUsers.data.total === 1 &&
-      !Object.hasOwn(managedUsers.data.items[0], 'password_hash')
+      !Object.hasOwn(managedUsers.data.items[0], 'password_hash') &&
+      managedUsers.data.items[0].password_status === 'Set (bcrypt hash)' &&
+      managedUsers.data.table.columns.some((column) => column.name === 'password_status' && !column.writable)
   );
   const managedImages = await dbManager.get('/api/database-manager/tool_images/rows');
   check(
     'database manager lists photo metadata without dumping image bytes',
     managedImages.status === 200 && managedImages.data.total >= 1 &&
       !managedImages.data.table.columns.some((column) => column.name === 'data') &&
-      !Object.hasOwn(managedImages.data.items[0], 'data')
+      !Object.hasOwn(managedImages.data.items[0] || {}, 'data'),
+    managedImages
   );
   const managedUser = managedUsers.data.items[0];
   const updateManagedUser = await dbManager.put(`/api/database-manager/users/${managedUser.id}`, { name: 'Managed Suresh' });

@@ -6,7 +6,7 @@ import {
 } from './dom.js';
 
 export const STATUS_FILTERS = [
-  ['', 'All'], ['requested', 'Requested'], ['accepted', 'Accepted'], ['in_progress', 'In progress'],
+  ['', 'All'], ['active', 'Active'], ['history', 'Past'], ['requested', 'Requested'], ['accepted', 'Accepted'], ['in_progress', 'In progress'],
   ['completed', 'Completed'], ['rejected', 'Rejected'], ['cancelled', 'Cancelled'],
 ];
 
@@ -40,7 +40,7 @@ export function bookingCard(b, role) {
     ${b.notes ? html`<p class="note">${b.notes}</p>` : ''}
     ${c.phone ? html`<div class="contact">Phone: <a href="tel:${c.phone}">${c.phone}</a></div>` : ''}
     ${b.rating ? html`<div class="stars">${'★'.repeat(b.rating)}${'☆'.repeat(5 - b.rating)} <span class="muted">${b.review || ''}</span></div>` : ''}
-    <div class="row between"><span class="muted small">Requested ${fmtDateTime(b.createdAt)}</span><span class="row">${actionsFor(b, role)}</span></div>
+    <div class="row between"><span class="muted small">Requested ${fmtDateTime(b.createdAt)}</span><span class="row"><button type="button" class="btn small ghost" data-message="${b.id}">Message ${role === 'farmer' ? 'provider' : 'farmer'}</button>${actionsFor(b, role)}</span></div>
   </article>`;
 }
 
@@ -102,7 +102,7 @@ export function mountBookingList(host, role, { initialStatus = '' } = {}) {
     try {
       const data = await api.get('/bookings', { status: st.status, page: st.page, pageSize: 10 });
       setHTML(host, html`
-        <div class="chips" role="group" aria-label="Filter by status" style="margin-bottom:1rem">
+        <div class="chips" role="group" aria-label="Filter bookings" style="margin-bottom:1rem">
           ${STATUS_FILTERS.map(([v, t]) => html`<button type="button" class="chip" data-filter="${v}" aria-pressed="${st.status === v}">${t}</button>`)}
         </div>
         ${data.items.length ? data.items.map((b) => bookingCard(b, role)) : html`<div class="empty"><h3>No bookings here yet</h3><p>${role === 'farmer' ? 'Find a machine or labour team near you and send a request.' : 'Requests from farmers will appear here.'}</p>${role === 'farmer' ? html`<a class="btn" href="/">Find machines</a>` : ''}</div>`}
@@ -114,6 +114,9 @@ export function mountBookingList(host, role, { initialStatus = '' } = {}) {
 
   on(host, 'click', '[data-filter]', (e, el) => { st.status = el.dataset.filter; st.page = 1; load(); });
   on(host, 'click', '[data-page]', (e, el) => { st.page = Number(el.dataset.page); load(); });
+  on(host, 'click', '[data-message]', (_e, el) => {
+    location.assign(`/chats?booking=${encodeURIComponent(el.dataset.message)}`);
+  });
   on(host, 'click', '[data-act]', async (e, el) => {
     const { act, id } = el.dataset;
     try {
@@ -125,5 +128,9 @@ export function mountBookingList(host, role, { initialStatus = '' } = {}) {
   });
 
   load();
+  const openBookingId = Number(new URLSearchParams(location.search).get('openBooking'));
+  if (Number.isSafeInteger(openBookingId) && openBookingId > 0) {
+    location.assign(`/chats?booking=${encodeURIComponent(openBookingId)}`);
+  }
   return { reload: load };
 }

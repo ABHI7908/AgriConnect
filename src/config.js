@@ -42,6 +42,7 @@ const schema = z.object({
   TWILIO_FROM: z.string().optional().default(''),
   MSG91_AUTH_KEY: z.string().optional().default(''),
   MSG91_TEMPLATE_ID: z.string().optional().default(''),
+  MSG91_NOTIFICATION_TEMPLATE_ID: z.string().optional().default(''),
 
   MAP_STREET_TILE_URL: z.string().url().default('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'),
   MAP_STREET_ATTRIBUTION: z.string().default('&copy; OpenStreetMap contributors'),
