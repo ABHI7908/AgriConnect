@@ -1,6 +1,6 @@
 // Minimal service worker: lets the app install and keeps the shell (CSS/JS/fonts/icons) fast and available offline.
 // API calls, uploads and the background video are never cached.
-const VERSION = 'v19';
+const VERSION = 'v20';
 const CACHE = `agri-shell-${VERSION}`;
 const SHELL = [
   '/', '/login', '/calculator', '/farmer', '/owner', '/chats', '/admin', '/database-manager',

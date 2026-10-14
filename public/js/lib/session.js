@@ -39,12 +39,12 @@ export function renderHeader(user, { showMenu = true } = {}) {
       const identity = `<span class="who">${esc(user.name || user.phone || user.email || '')}</span>`;
       if (user.role === 'farmer') {
         items = identity +
-          `<a href="/farmer#bookings">My farm dashboard</a>` +
-          `<a href="/farmer?bookings=active#bookings">Active bookings</a>` +
+          `<a href="/farmer#bookings">My farm bookings</a>` +
           `<a href="/farmer?bookings=history#bookings">Past bookings</a>` +
           `<a href="/chats">Chats</a>` +
+          `<a href="/calculator">Crop calculator</a>` +
+          `<a href="/farmer?bookings=active#bookings">Active bookings</a>` +
           `<a href="/farmer#saved">Saved calculations</a>` +
-          `<a href="/calculator">Land &amp; yield calculator</a>` +
           `<a href="/farmer#profile">My profile</a>` +
           `<button class="link" type="button" data-logout>Sign out</button>`;
       } else if (user.role === 'owner') {
