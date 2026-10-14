@@ -515,12 +515,11 @@ body.bg-on { background: transparent; }
 .bg-video video { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; opacity: 0; transition: opacity .8s ease; }
 .bg-video video.ready { opacity: 1; }
 /* Keep app content above the fixed backdrop; overlays soften the video without washing it out. */
-.bg-shade { position: fixed; inset: 0; z-index: 1; background: rgba(243, 245, 238, .84); }
+.bg-shade { position: fixed; inset: 0; z-index: 1; background: rgba(243, 245, 238, .38); }
 body.bg-on > :not(.bg-video):not(.bg-shade):not(.site-header) { position: relative; z-index: 2; }
-body.page-dark .bg-shade { background: linear-gradient(180deg, rgba(5, 17, 10, .68), rgba(5, 17, 10, .78)); }
-body.page-dark .hero h1, body.page-dark .hero .lede { color: #fff; }
-body.page-dark .hero .lede { color: #e1ede4; }
-body.page-dark .loc-status { color: #e1ede4; }
+body.page-dark .hero h1 { color: var(--ink); text-shadow: 0 1px 3px rgba(243, 245, 238, .9); }
+body.page-dark .hero .lede, body.page-dark .loc-status { color: var(--muted); }
+.admin-page #login > h1 { display: table; padding: .25rem .5rem; border-radius: var(--r-sm); background: var(--paper); }
 body.page-dark main > section:not(.hero) { background: var(--field); border-radius: var(--r-md) var(--r-md) 0 0; padding-bottom: 1.5rem; }
 .site-footer { margin-top: 0; }
 body:not(.page-dark) .site-footer { margin-top: 3rem; }
@@ -613,6 +612,9 @@ input, select, textarea { min-width: 0; }
 
 :root[data-theme='dark'] .bg-shade { background: rgba(5, 12, 8, .78); }
 :root[data-theme='dark'] body.page-dark .bg-shade { background: linear-gradient(180deg, rgba(2, 9, 5, .76), rgba(2, 9, 5, .84)); }
+:root[data-theme='dark'] body.page-dark .hero h1 { color: #fff; }
+:root[data-theme='dark'] body.page-dark .hero .lede,
+:root[data-theme='dark'] body.page-dark .loc-status { color: #e1ede4; }
 :root[data-theme='dark'] .site-header,
 :root[data-theme='dark'] .site-footer { background: var(--paper); color: var(--muted); }
 :root[data-theme='dark'] .brand,
