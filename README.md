@@ -67,7 +67,7 @@ Blocking an account increments its session version so existing sessions stop bei
 
 ### Database-manager features
 
-The separate `/database-manager` interface can search, inspect, edit, delete, and export records from its allowlisted application tables. It is protected by its own configured login, separate from the admin account. Password hashes, token versions, OTP records, admin accounts, and raw photo bytes are not exposed through this interface; audit records are read-only.
+The separate `/database-manager` interface can search, inspect, edit, delete, and export records from its allowlisted application tables. It is protected by its own configured login, separate from the admin account. User records show whether a password is set and allow the database manager to set a new password; new passwords are bcrypt-hashed and existing user sessions are invalidated. Password hashes, token versions, OTP records, admin accounts, and raw photo bytes are not exposed through this interface; audit records are read-only.
 
 Database-manager edits and deletes are powerful operations. Deleting users may cascade to related records; back up PostgreSQL before making destructive changes.
 
@@ -380,7 +380,7 @@ All APIs are under `/api`. State-changing browser API calls require the app's cu
 | `/api/communications` | Notifications, booking messages, and private farmer/provider service chats |
 | `/api/calculator` | Crop list, yield calculation, polygon measurement, farmer saved calculations |
 | `/api/admin` | Admin stats, moderation, user management, bookings/audit, crop maintenance |
-| `/api/database-manager` | Separate database-manager session, table listing/search, record edit/delete, CSV export |
+| `/api/database-manager` | Separate database-manager session, table listing/search, record edit/delete, password reset, CSV export |
 
 Validation is applied to route inputs with Zod schemas. The server responds with structured errors for invalid requests and authorization failures.
 

@@ -89,6 +89,26 @@
       </div>
     </form>
   </dialog>
+  <dialog id="password-dialog">
+    <form id="password-form">
+      <h2>Set a new password</h2>
+      <p id="password-user" class="muted"></p>
+      <p class="muted">The new password will be securely hashed. The user's existing sessions will be signed out.</p>
+      <div class="field">
+        <label for="new-password">New password</label>
+        <input id="new-password" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="200" required>
+      </div>
+      <div class="field">
+        <label for="confirm-password">Confirm new password</label>
+        <input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="200" required>
+      </div>
+      <p id="password-error" class="form-error hidden" role="alert"></p>
+      <div class="db-footer">
+        <button class="btn ghost" type="button" id="cancel-password">Cancel</button>
+        <button class="btn" type="submit">Save new password</button>
+      </div>
+    </form>
+  </dialog>
   <footer class="site-footer"><div class="container"><span>AgriConnect database manager</span><span>Use exports and edits carefully; deleting accounts may also remove linked records.</span></div></footer>
   <script type="module" src="/js/database-manager.js"></script>
 </body>

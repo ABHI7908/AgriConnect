@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { z } = require('zod');
@@ -319,6 +320,43 @@ router.get('/:table/rows', async (req, res, next) => {
       page: query.page,
       pageSize: query.pageSize,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/users/:id/password', limits.databaseManagerPasswordChange, async (req, res, next) => {
+  try {
+    const parsedId = Number(req.params.id);
+    if (!Number.isSafeInteger(parsedId) || parsedId < 1) throw badRequest('Invalid user ID');
+    const input = z.object({
+      password: z.string().min(8).max(200),
+      confirmPassword: z.string().min(8).max(200),
+    }).refine((value) => value.password === value.confirmPassword, {
+      message: 'The passwords do not match',
+      path: ['confirmPassword'],
+    }).safeParse(req.body);
+    if (!input.success) throw badRequest(input.error.issues[0]?.message || 'Enter a valid password');
+
+    const user = await db.prepare('SELECT role FROM users WHERE id = ?').get(parsedId);
+    if (!user || user.role === 'admin') throw notFound('User account not found');
+
+    const passwordHash = await bcrypt.hash(input.data.password, 12);
+    const changed = await db.prepare(
+      `UPDATE users
+          SET password_hash = ?, token_version = token_version + 1,
+              updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+        WHERE id = ? AND role <> 'admin'`
+    ).run(passwordHash, parsedId);
+    if (changed.changes !== 1) throw notFound('User account not found');
+
+    audit(req, 'database_manager.password_reset', {
+      actor: { id: null, role: 'database_manager' },
+      entity: 'user',
+      entityId: parsedId,
+      meta: { email: req.dbManagerEmail },
+    });
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

@@ -34,5 +34,6 @@ module.exports = {
     keyGenerator: loginKey('phone'),
     skipSuccessfulRequests: true,
   }),
+  databaseManagerPasswordChange: make(15 * MIN, 10, 'Too many password changes from this network. Please try again later.'),
   upload: make(15 * MIN, 60, 'Too many uploads. Please try again later.'),
 };

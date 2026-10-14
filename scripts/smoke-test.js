@@ -12,6 +12,7 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const { execFileSync } = require('child_process');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agri-test-'));
@@ -771,6 +772,41 @@ async function main() {
   const updateManagedUser = await dbManager.put(`/api/database-manager/users/${managedUser.id}`, { name: 'Managed Suresh' });
   const restoreManagedUser = await dbManager.put(`/api/database-manager/users/${managedUser.id}`, { name: 'Suresh Reddy' });
   check('database manager can edit an account and restore its value', updateManagedUser.status === 200 && restoreManagedUser.status === 200);
+  const passwordBeforeManagerReset = await db.prepare(
+    'SELECT password_hash, token_version FROM users WHERE id = ?'
+  ).get(managedUser.id);
+  const shortManagerPassword = await dbManager.post(`/api/database-manager/users/${managedUser.id}/password`, {
+    password: 'short',
+    confirmPassword: 'short',
+  });
+  const mismatchManagerPassword = await dbManager.post(`/api/database-manager/users/${managedUser.id}/password`, {
+    password: 'Manager-Password-123!',
+    confirmPassword: 'Different-Password-456!',
+  });
+  const managerPasswordReset = await dbManager.post(`/api/database-manager/users/${managedUser.id}/password`, {
+    password: 'Manager-Password-123!',
+    confirmPassword: 'Manager-Password-123!',
+  });
+  const passwordAfterManagerReset = await db.prepare(
+    'SELECT password_hash, token_version FROM users WHERE id = ?'
+  ).get(managedUser.id);
+  const managerPasswordMatches = await bcrypt.compare('Manager-Password-123!', passwordAfterManagerReset.password_hash);
+  check(
+    'database manager validates and securely resets user passwords',
+    shortManagerPassword.status === 400 && mismatchManagerPassword.status === 400 &&
+      managerPasswordReset.status === 200 && managerPasswordReset.data.ok &&
+      !Object.hasOwn(managerPasswordReset.data, 'password_hash') &&
+      /^\$2[aby]\$/.test(passwordAfterManagerReset.password_hash) &&
+      passwordAfterManagerReset.password_hash !== 'Manager-Password-123!' &&
+      managerPasswordMatches &&
+      passwordAfterManagerReset.token_version === passwordBeforeManagerReset.token_version + 1
+  );
+  check(
+    'database manager password reset is audited without recording the password',
+    (await db.prepare(
+      "SELECT COUNT(*) AS n FROM audit_logs WHERE action = 'database_manager.password_reset' AND entity_id = ? AND meta NOT LIKE '%Manager-Password-123%'"
+    ).get(managedUser.id)).n === 1
+  );
   const managedExport = await dbManager.get('/api/database-manager/crops/export');
   check('database manager can export table records', managedExport.status === 200 && managedExport.headers.get('content-type').includes('text/csv'));
   const testCropResult = await db.prepare(

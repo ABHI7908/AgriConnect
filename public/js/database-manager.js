@@ -13,6 +13,7 @@ const pager = $('#pager');
 const summary = $('#table-summary');
 const search = $('#search');
 const dialog = $('#edit-dialog');
+const passwordDialog = $('#password-dialog');
 let current = { table: '', page: 1, pageSize: 25, total: 0, columns: [], items: [], readOnly: false };
 let searchTimer;
 
@@ -123,7 +124,7 @@ function renderRecords() {
           <h3>${escapeHtml(title)}</h3>
         </div>
         <div class="db-record-actions">
-          ${current.readOnly ? '' : `<button type="button" class="btn ghost small" data-edit="${escapeHtml(item[idColumn])}">Edit</button><button type="button" class="btn danger small" data-delete="${escapeHtml(item[idColumn])}">Delete</button>`}
+          ${current.readOnly ? '' : `${current.table === 'users' ? `<button type="button" class="btn ghost small" data-password="${escapeHtml(item[idColumn])}">Change password</button>` : ''}<button type="button" class="btn ghost small" data-edit="${escapeHtml(item[idColumn])}">Edit</button><button type="button" class="btn danger small" data-delete="${escapeHtml(item[idColumn])}">Delete</button>`}
         </div>
       </div>
       <details class="db-record-details">
@@ -135,6 +136,7 @@ function renderRecords() {
   records.innerHTML = `<div class="db-record-list">${cards}</div>`;
   records.querySelectorAll('[data-edit]').forEach((button) => button.addEventListener('click', () => editRecord(Number(button.dataset.edit))));
   records.querySelectorAll('[data-delete]').forEach((button) => button.addEventListener('click', () => deleteRecord(Number(button.dataset.delete))));
+  records.querySelectorAll('[data-password]').forEach((button) => button.addEventListener('click', () => changePassword(Number(button.dataset.password))));
 }
 
 async function loadRecords() {
@@ -187,6 +189,16 @@ function editRecord(id) {
   dialog.showModal();
 }
 
+function changePassword(id) {
+  const row = current.items.find((item) => item.id === id);
+  if (!row) return;
+  $('#password-user').textContent = `${row.name || row.email || row.phone || `User #${id}`} · ${row.role}`;
+  $('#password-form').reset();
+  showError($('#password-error'));
+  passwordDialog.dataset.id = String(id);
+  passwordDialog.showModal();
+}
+
 $('#edit-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const body = Object.fromEntries(new FormData(event.currentTarget).entries());
@@ -200,6 +212,34 @@ $('#edit-form').addEventListener('submit', async (event) => {
 });
 
 $('#cancel-edit').addEventListener('click', () => dialog.close());
+
+$('#password-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form).entries());
+  showError($('#password-error'));
+  if (values.password !== values.confirmPassword) {
+    showError($('#password-error'), 'The passwords do not match.');
+    return;
+  }
+  const button = form.querySelector('[type="submit"]');
+  button.disabled = true;
+  try {
+    await request(`/users/${encodeURIComponent(passwordDialog.dataset.id)}/password`, {
+      method: 'POST',
+      json: values,
+    });
+    passwordDialog.close();
+    form.reset();
+    await loadRecords();
+  } catch (err) {
+    showError($('#password-error'), err.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('#cancel-password').addEventListener('click', () => passwordDialog.close());
 
 async function deleteRecord(id) {
   const warning = current.table === 'users'
