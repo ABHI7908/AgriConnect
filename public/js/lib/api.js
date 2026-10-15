@@ -19,6 +19,12 @@ function buildQuery(query) {
   return s ? `?${s}` : '';
 }
 
+function canRetryNetworkError(method, url) {
+  return method === 'GET' || (method === 'POST' && /^\/auth\/(?:admin\/login|password\/login)$/.test(url));
+}
+
+const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
 async function request(method, url, { json, form, query } = {}) {
   const headers = { 'X-Requested-With': 'agriconnect', Accept: 'application/json' };
   let body;
@@ -29,11 +35,18 @@ async function request(method, url, { json, form, query } = {}) {
     body = JSON.stringify(json);
   }
 
+  const maxAttempts = canRetryNetworkError(method, url) ? 9 : 1;
   let res;
-  try {
-    res = await fetch(`/api${url}${buildQuery(query)}`, { method, headers, body, credentials: 'same-origin' });
-  } catch (_) {
-    throw new ApiError(0, 'NETWORK', 'Could not connect to the AgriConnect server. Check that it is running, then try again.');
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      res = await fetch(`/api${url}${buildQuery(query)}`, { method, headers, body, credentials: 'same-origin' });
+      break;
+    } catch (_) {
+      if (attempt === maxAttempts) {
+        throw new ApiError(0, 'NETWORK', 'Could not connect to the AgriConnect server. It may be restarting or your device may be offline. Please try again.');
+      }
+      await wait(Math.min(1000 * 2 ** (attempt - 1), 10000));
+    }
   }
 
   let data = null;

@@ -48,7 +48,7 @@ Set-ScheduledTask -TaskName $watchdogTaskName -Settings $watchdogSettings | Out-
 
 Start-ScheduledTask -TaskName $taskName
 
-$deadline = (Get-Date).AddSeconds(60)
+$deadline = (Get-Date).AddMinutes(4)
 do {
   try {
     $response = Invoke-WebRequest -Uri 'http://localhost:3000/healthz' -UseBasicParsing -TimeoutSec 2

@@ -10,18 +10,37 @@ $env:PGLITE_DATA_DIR = Join-Path $projectRoot 'data\pglite'
 
 $logDirectory = Join-Path $projectRoot 'data\logs'
 New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
-$logPath = Join-Path $logDirectory 'local-server.log'
 $nodePath = (Get-Command node.exe -ErrorAction Stop).Source
 
-while ($true) {
-  Add-Content -Path $logPath -Value "`n[$(Get-Date -Format o)] Starting AgriConnect on localhost:3000"
-  & $nodePath 'src\server.js' *>> $logPath
-  $exitCode = $LASTEXITCODE
-  Add-Content -Path $logPath -Value "[$(Get-Date -Format o)] AgriConnect exited with code $exitCode"
+function Test-AgriConnectHealth {
+  try {
+    $response = Invoke-WebRequest -Uri 'http://127.0.0.1:3000/healthz' -UseBasicParsing -TimeoutSec 3
+    $health = $response.Content | ConvertFrom-Json
+    return $response.StatusCode -eq 200 -and $health.status -eq 'ok'
+  } catch {
+    return $false
+  }
+}
 
-  if ($exitCode -eq 0) {
+$deadline = (Get-Date).AddMinutes(4)
+while ((Get-Date) -lt $deadline) {
+  if (Test-AgriConnectHealth) {
     exit 0
   }
 
-  Start-Sleep -Seconds 5
+  & $nodePath (Join-Path $PSScriptRoot 'launch-local-server.js')
+  if ($LASTEXITCODE -ne 0) {
+    throw "Could not launch the AgriConnect server (Node exit code $LASTEXITCODE)."
+  }
+
+  while ((Get-Date) -lt $deadline) {
+    if (Test-AgriConnectHealth) {
+      exit 0
+    }
+    Start-Sleep -Seconds 3
+  }
+
+  throw "AgriConnect did not become healthy within four minutes. Check data\logs\local-server.log."
 }
+
+throw "AgriConnect did not become healthy within four minutes. Check data\logs\local-server.log."

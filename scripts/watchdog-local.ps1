@@ -1,29 +1,45 @@
 $ErrorActionPreference = 'Stop'
 
 $taskName = 'AgriConnect Local Server'
-$reachable = $false
-$lastError = 'Health endpoint did not return status ok.'
+$dataDirectory = Join-Path $PSScriptRoot '..\data'
+$logDirectory = Join-Path $dataDirectory 'logs'
+$statePath = Join-Path $dataDirectory 'watchdog-unhealthy-since.txt'
+$logPath = Join-Path $logDirectory 'watchdog.log'
 
-for ($attempt = 1; $attempt -le 3; $attempt += 1) {
-  try {
-    $response = Invoke-WebRequest -Uri 'http://127.0.0.1:3000/healthz' -UseBasicParsing -TimeoutSec 5
-    $health = $response.Content | ConvertFrom-Json
-    $reachable = $response.StatusCode -eq 200 -and $health.status -eq 'ok'
-    if ($reachable) {
-      exit 0
-    }
-    $lastError = "Health endpoint returned HTTP $($response.StatusCode) with status '$($health.status)'."
-  } catch {
-    $lastError = $_.Exception.Message
+$lastError = $null
+try {
+  $response = Invoke-WebRequest -Uri 'http://127.0.0.1:3000/healthz' -UseBasicParsing -TimeoutSec 5
+  $health = $response.Content | ConvertFrom-Json
+  if ($response.StatusCode -eq 200 -and $health.status -eq 'ok') {
+    Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
+    exit 0
   }
-
-  if ($attempt -lt 3) {
-    Start-Sleep -Seconds 5
-  }
+  $lastError = "Health endpoint returned HTTP $($response.StatusCode) with status '$($health.status)'."
+} catch {
+  $lastError = $_.Exception.Message
 }
 
 $task = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
 if ($task.State -eq 'Running') {
+  $unhealthySince = $null
+  if (Test-Path -LiteralPath $statePath) {
+    $storedValue = Get-Content -LiteralPath $statePath -Raw
+    $parsedValue = [DateTimeOffset]::MinValue
+    if ([DateTimeOffset]::TryParse($storedValue, [ref]$parsedValue)) {
+      $unhealthySince = $parsedValue
+    }
+  }
+
+  if ($null -eq $unhealthySince) {
+    New-Item -ItemType Directory -Path $dataDirectory -Force | Out-Null
+    Set-Content -LiteralPath $statePath -Value [DateTimeOffset]::Now.ToString('o')
+    exit 0
+  }
+
+  if ([DateTimeOffset]::Now - $unhealthySince -lt [TimeSpan]::FromMinutes(5)) {
+    exit 0
+  }
+
   Stop-ScheduledTask -TaskName $taskName
   $deadline = (Get-Date).AddSeconds(15)
   do {
@@ -38,6 +54,6 @@ if ($task.State -eq 'Running') {
 
 Start-ScheduledTask -TaskName $taskName
 
-$logDirectory = Join-Path $PSScriptRoot '..\data\logs'
 New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
-Add-Content -Path (Join-Path $logDirectory 'watchdog.log') -Value "[$(Get-Date -Format o)] Restarted AgriConnect after failed health checks: $lastError"
+Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
+Add-Content -Path $logPath -Value "[$(Get-Date -Format o)] Started AgriConnect after failed health check: $lastError"
