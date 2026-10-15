@@ -2,15 +2,17 @@ $ErrorActionPreference = 'Stop'
 
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $taskName = 'AgriConnect Local Server'
+$watchdogTaskName = 'AgriConnect Local Server Watchdog'
 $account = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $powershellPath = (Get-Command powershell.exe -ErrorAction Stop).Source
 $startupScript = Join-Path $PSScriptRoot 'start-local.ps1'
+$watchdogScript = Join-Path $PSScriptRoot 'watchdog-local.ps1'
 
 $action = New-ScheduledTaskAction `
   -Execute $powershellPath `
   -Argument "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$startupScript`"" `
   -WorkingDirectory $projectRoot
-$trigger = New-ScheduledTaskTrigger -AtLogOn -User $account
+$logonTrigger = New-ScheduledTaskTrigger -AtLogOn -User $account
 $principal = New-ScheduledTaskPrincipal -UserId $account -LogonType Interactive -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet `
   -AllowStartIfOnBatteries `
@@ -24,11 +26,25 @@ $settings = New-ScheduledTaskSettingsSet `
 Register-ScheduledTask `
   -TaskName $taskName `
   -Action $action `
-  -Trigger $trigger `
+  -Trigger $logonTrigger `
   -Principal $principal `
   -Settings $settings `
   -Description 'Starts the local AgriConnect server at sign-in and restarts it if it exits unexpectedly.' `
   -Force | Out-Null
+
+$watchdogCommand = "`"$powershellPath`" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$watchdogScript`""
+& schtasks.exe /Create /SC MINUTE /MO 1 /TN $watchdogTaskName /TR $watchdogCommand /RU $account /IT /F
+if ($LASTEXITCODE -ne 0) {
+  throw "Could not register the AgriConnect watchdog task (schtasks exit code $LASTEXITCODE)."
+}
+
+$watchdogSettings = New-ScheduledTaskSettingsSet `
+  -AllowStartIfOnBatteries `
+  -DontStopIfGoingOnBatteries `
+  -ExecutionTimeLimit ([TimeSpan]::Zero) `
+  -MultipleInstances IgnoreNew `
+  -StartWhenAvailable
+Set-ScheduledTask -TaskName $watchdogTaskName -Settings $watchdogSettings | Out-Null
 
 Start-ScheduledTask -TaskName $taskName
 

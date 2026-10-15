@@ -265,7 +265,7 @@ On Windows, install a sign-in startup task so the server is running before you o
 powershell -ExecutionPolicy Bypass -File .\scripts\install-windows-autostart.ps1
 ```
 
-The task always uses the persistent `data/pglite` database, restarts the server after unexpected exits, and logs to `data/logs/local-server.log`. `npm run dev` detects a healthy server on port 3000 and does not start a duplicate. To remove automatic startup, run `Unregister-ScheduledTask -TaskName 'AgriConnect Local Server' -Confirm:$false` in PowerShell.
+The task always uses the persistent `data/pglite` database, restarts the server after unexpected exits, and logs to `data/logs/local-server.log`. A separate one-minute watchdog continues running on battery, verifies that the health endpoint returns HTTP 200 with `status: ok`, and restarts the server task after repeated failures even if Windows still reports that task as running. Recovery events are logged to `data/logs/watchdog.log`. `npm run dev` detects a healthy server on port 3000 and does not start a duplicate. To remove automatic startup, run `Unregister-ScheduledTask -TaskName 'AgriConnect Local Server' -Confirm:$false` and `schtasks.exe /Delete /TN 'AgriConnect Local Server Watchdog' /F` in PowerShell.
 
 ### 5. Run optional demo data
 
