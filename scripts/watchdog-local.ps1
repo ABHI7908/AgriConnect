@@ -1,10 +1,11 @@
 $ErrorActionPreference = 'Stop'
 
-$taskName = 'AgriConnect Local Server'
 $dataDirectory = Join-Path $PSScriptRoot '..\data'
 $logDirectory = Join-Path $dataDirectory 'logs'
 $statePath = Join-Path $dataDirectory 'watchdog-unhealthy-since.txt'
 $logPath = Join-Path $logDirectory 'watchdog.log'
+$projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$nodePath = (Get-Command node.exe -ErrorAction Stop).Source
 
 $lastError = $null
 try {
@@ -19,41 +20,37 @@ try {
   $lastError = $_.Exception.Message
 }
 
-$task = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
-if ($task.State -eq 'Running') {
-  $unhealthySince = $null
-  if (Test-Path -LiteralPath $statePath) {
-    $storedValue = Get-Content -LiteralPath $statePath -Raw
-    $parsedValue = [DateTimeOffset]::MinValue
-    if ([DateTimeOffset]::TryParse($storedValue, [ref]$parsedValue)) {
-      $unhealthySince = $parsedValue
-    }
-  }
-
-  if ($null -eq $unhealthySince) {
-    New-Item -ItemType Directory -Path $dataDirectory -Force | Out-Null
-    Set-Content -LiteralPath $statePath -Value [DateTimeOffset]::Now.ToString('o')
-    exit 0
-  }
-
-  if ([DateTimeOffset]::Now - $unhealthySince -lt [TimeSpan]::FromMinutes(5)) {
-    exit 0
-  }
-
-  Stop-ScheduledTask -TaskName $taskName
-  $deadline = (Get-Date).AddSeconds(15)
-  do {
-    Start-Sleep -Seconds 1
-    $task = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
-  } while ($task.State -eq 'Running' -and (Get-Date) -lt $deadline)
-
-  if ($task.State -eq 'Running') {
-    throw "Could not stop the unhealthy AgriConnect server task."
-  }
+if (-not (Test-Path -LiteralPath $statePath)) {
+  New-Item -ItemType Directory -Path $dataDirectory -Force | Out-Null
+  Set-Content -LiteralPath $statePath -Value ([DateTimeOffset]::Now.ToString('o'))
 }
 
-Start-ScheduledTask -TaskName $taskName
+$storedValue = Get-Content -LiteralPath $statePath -Raw
+$unhealthySince = [DateTimeOffset]::MinValue
+if (-not [DateTimeOffset]::TryParse($storedValue, [ref]$unhealthySince)) {
+  $unhealthySince = [DateTimeOffset]::Now
+  Set-Content -LiteralPath $statePath -Value $unhealthySince.ToString('o')
+}
 
-New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
-Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
-Add-Content -Path $logPath -Value "[$(Get-Date -Format o)] Started AgriConnect after failed health check: $lastError"
+$forceRestart = [DateTimeOffset]::Now - $unhealthySince -ge [TimeSpan]::FromMinutes(5)
+if ($forceRestart -and (Test-Path -LiteralPath (Join-Path $dataDirectory 'agriconnect-server.pid'))) {
+  $launcherArgs = @('scripts\launch-local-server.js', '--force')
+} else {
+  $launcherArgs = @('scripts\launch-local-server.js')
+}
+
+$env:NODE_ENV = 'development'
+$env:PORT = '3000'
+$env:DATABASE_MODE = 'pglite'
+$env:PGLITE_DATA_DIR = Join-Path $projectRoot 'data\pglite'
+Push-Location $projectRoot
+try {
+  & $nodePath @launcherArgs
+  if ($LASTEXITCODE -ne 0) {
+    throw "Could not launch AgriConnect from the watchdog (Node exit code $LASTEXITCODE)."
+  }
+} finally {
+  Pop-Location
+}
+
+Add-Content -Path $logPath -Value "[$(Get-Date -Format o)] Requested AgriConnect launch after failed health check: $lastError"

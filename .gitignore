@@ -3,6 +3,9 @@ node_modules/
 .expo/
 data/*.db*
 data/.agriconnect-pglite.lock
+data/agriconnect-server.pid
+data/agriconnect-server-launch.lock
+data/watchdog-unhealthy-since.txt
 data/pglite*/
 data/backups/
 data/logs/
