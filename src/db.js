@@ -1,5 +1,7 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const { Pool, types } = require('pg');
 const { AsyncLocalStorage } = require('async_hooks');
 const config = require('./config');
@@ -13,13 +15,90 @@ types.setTypeParser(types.builtins.INT8, (value) => {
 types.setTypeParser(1082, (value) => value);
 
 let pool;
+let releaseDatabaseLock = () => {};
 if (config.DATABASE_MODE === 'pglite' || config.NODE_ENV === 'test') {
+  if (config.NODE_ENV !== 'test') {
+    const lockPath = path.join(config.root, 'data', '.agriconnect-pglite.lock');
+    fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+    const createLock = () => {
+      const token = `${process.pid}:${Date.now()}`;
+      const fd = fs.openSync(lockPath, 'wx');
+      try {
+        fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, token }));
+      } catch (error) {
+        fs.closeSync(fd);
+        fs.unlinkSync(lockPath);
+        throw error;
+      }
+      fs.closeSync(fd);
+      return { token };
+    };
+    let lock;
+    try {
+      lock = createLock();
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      let existing;
+      try {
+        existing = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+      } catch (readError) {
+        throw new Error(`Cannot inspect the PGlite lock at ${lockPath}: ${readError.message}`);
+      }
+      let processIsRunning = false;
+      try {
+        if (!Number.isSafeInteger(existing.pid) || existing.pid < 1) {
+          throw new Error('lock does not contain a valid process ID');
+        }
+        process.kill(existing.pid, 0);
+        processIsRunning = true;
+      } catch (processError) {
+        if (processError.code !== 'ESRCH') {
+          throw new Error(`Cannot verify the PGlite lock owner: ${processError.message}`);
+        }
+      }
+      if (processIsRunning) {
+        throw new Error(`PGlite data is already in use by process ${existing.pid}; only one AgriConnect server may use it.`);
+      }
+      fs.unlinkSync(lockPath);
+      lock = createLock();
+    }
+
+    releaseDatabaseLock = () => {
+      try {
+        const current = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+        if (current.token === lock.token) fs.unlinkSync(lockPath);
+      } catch (error) {
+        if (error.code !== 'ENOENT') {
+          // eslint-disable-next-line no-console
+          console.error('Could not release the PGlite process lock:', error.message);
+        }
+      }
+    };
+
+    const pidPath = path.join(config.pgliteDataDir, 'postmaster.pid');
+    if (fs.existsSync(pidPath) && fs.statSync(pidPath).size === 0) {
+      fs.unlinkSync(pidPath);
+      // eslint-disable-next-line no-console
+      console.warn('Removed an incomplete PGlite startup lock; no other AgriConnect server owns the database.');
+    }
+  }
+
   const embeddedDatabase = import('@electric-sql/pglite').then(async ({ PGlite }) => {
     const database = new PGlite({
       ...(config.NODE_ENV === 'test' ? {} : { dataDir: config.pgliteDataDir }),
       parsers: { 1082: (value) => value },
     });
-    await database.waitReady;
+    try {
+      await database.waitReady;
+    } catch (error) {
+      try {
+        await database.close();
+      } catch (closeError) {
+        // eslint-disable-next-line no-console
+        console.error('PGlite cleanup after initialization failure failed:', closeError.message);
+      }
+      throw error;
+    }
     return database;
   });
   const client = async () => {
@@ -32,7 +111,13 @@ if (config.DATABASE_MODE === 'pglite' || config.NODE_ENV === 'test') {
   pool = {
     connect: client,
     query: async (sql, values) => (await client()).query(sql, values),
-    end: async () => (await embeddedDatabase).close(),
+    end: async () => {
+      try {
+        await (await embeddedDatabase).close();
+      } finally {
+        releaseDatabaseLock();
+      }
+    },
     on() {},
   };
 } else {

@@ -5,7 +5,7 @@
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
+    "dev": "node scripts/dev.js",
     "mobile": "expo start --lan --port 8082",
     "seed:demo": "node scripts/seed-demo.js",
     "migrate:postgres": "node scripts/migrate-sqlite-to-postgres.js",

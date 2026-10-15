@@ -259,6 +259,14 @@ For automatic restarts while developing:
 npm run dev
 ```
 
+On Windows, install a sign-in startup task so the server is running before you open the app:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-windows-autostart.ps1
+```
+
+The task always uses the persistent `data/pglite` database, restarts the server after unexpected exits, and logs to `data/logs/local-server.log`. `npm run dev` detects a healthy server on port 3000 and does not start a duplicate. To remove automatic startup, run `Unregister-ScheduledTask -TaskName 'AgriConnect Local Server' -Confirm:$false` in PowerShell.
+
 ### 5. Run optional demo data
 
 In a separate terminal:
@@ -312,7 +320,6 @@ The complete template and comments are in `.env.example`.
 | `JWT_EXPIRES_IN_DAYS` | User session duration |
 | `OTP_PEPPER` | Secret key for OTP hashing; private, at least 16 characters |
 | `DATABASE_MODE` | `pglite` (default outside production) or `postgres` (default in production) |
-| `PGLITE_DATA_DIR` | Persistent local embedded database directory; defaults to `./data/pglite` |
 | `DATABASE_URL` | PostgreSQL connection URL used when `DATABASE_MODE=postgres`; keep private |
 | `DATABASE_SSL` | Enable PostgreSQL TLS when required |
 | `DATABASE_SSL_VERIFY` | Verify the PostgreSQL TLS certificate; do not disable casually |

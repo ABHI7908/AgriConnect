@@ -2,8 +2,10 @@
 node_modules/
 .expo/
 data/*.db*
-data/pglite/
+data/.agriconnect-pglite.lock
+data/pglite*/
 data/backups/
+data/logs/
 uploads/*
 !uploads/.gitkeep
 *.log
