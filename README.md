@@ -2,7 +2,7 @@
 
 AgriConnect is a responsive agricultural services marketplace. Farmers can find nearby farm machinery and labour, send booking requests, measure fields, estimate crop yields, and keep a history of their work. Machinery owners and labour providers can publish and manage listings. Administrators moderate listings and accounts, while a separate database-manager interface supports controlled record maintenance.
 
-The application includes a web app for desktop and mobile browsers, an Expo Go mobile shell, and a PostgreSQL-backed Express API.
+The application includes a web app for desktop and mobile browsers and an Expo Go mobile shell. Local development uses a persistent embedded PostgreSQL-compatible database by default; production uses PostgreSQL.
 
 ## Contents
 
@@ -197,7 +197,7 @@ Maps do not require a Google Maps API key. The application can open coordinates 
 ## Requirements
 
 - Node.js 20+ and npm.
-- A running PostgreSQL server and an empty application database for first-time setup.
+- For production or when using `DATABASE_MODE=postgres`, a running PostgreSQL server and an empty application database for first-time setup. Local development uses embedded PGlite and does not require a separate database server.
 - For Expo Go testing: Expo Go installed on the phone, with the phone and development computer on the same reachable network.
 - Browser geolocation generally requires HTTPS, except for localhost development. Expo uses native location permissions through its bridge.
 
@@ -211,7 +211,9 @@ Open a terminal in the project root:
 npm install
 ```
 
-### 2. Create a PostgreSQL database
+### 2. Configure the database
+
+Local development uses an embedded PGlite database persisted under `data/pglite` by default, so no PostgreSQL service needs to be installed or started. To use PostgreSQL locally instead, set `DATABASE_MODE=postgres` and configure `DATABASE_URL`:
 
 Create a PostgreSQL database and application user using your PostgreSQL provider or local PostgreSQL installation. Keep the username and password private.
 
@@ -236,13 +238,12 @@ Copy-Item .env.example .env
 
 Set at minimum:
 
-- `DATABASE_URL` to the PostgreSQL connection URL.
 - `JWT_SECRET` to a private random value of at least 32 characters.
 - `OTP_PEPPER` to a private random value of at least 16 characters.
 - `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
 - `DB_MANAGER_EMAIL` and `DB_MANAGER_PASSWORD` (only if you set `DB_MANAGER_ENABLED=true`; the database manager is disabled by default in production).
 
-The server creates/updates the PostgreSQL schema at startup and seeds the default crop rows when the crop table is empty. If database SSL is required by the provider, configure `DATABASE_SSL` and `DATABASE_SSL_VERIFY` as described below.
+Local development defaults to `DATABASE_MODE=pglite`; it needs no database URL or PostgreSQL service. Set `DATABASE_MODE=postgres` and `DATABASE_URL` only when using PostgreSQL. The server creates/updates the database schema at startup and seeds the default crop rows when the crop table is empty. PGlite data remains on disk across restarts. Production requires PostgreSQL; if database SSL is required by the provider, configure `DATABASE_SSL` and `DATABASE_SSL_VERIFY` as described below.
 
 ### 4. Start the API and web app
 
@@ -250,7 +251,7 @@ The server creates/updates the PostgreSQL schema at startup and seeds the defaul
 npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The health endpoint is [http://localhost:3000/healthz](http://localhost:3000/healthz).
+Open [http://localhost:3000](http://localhost:3000). The health endpoint is [http://localhost:3000/healthz](http://localhost:3000/healthz). In development the server always uses port 3000, even if another `PORT` value is set in the shell. Do not open `public/index.html` as a file or use VS Code Live Server; the app needs the Express API and database running. Localhost pages opened on another port are redirected to port 3000.
 
 For automatic restarts while developing:
 
@@ -278,7 +279,7 @@ The smoke-test script uses `NODE_ENV=test` and PGlite, an embedded PostgreSQL-co
 
 ## Run on a phone with Expo Go
 
-The Expo app is a native shell around the same web application; server/API features still require the Node.js app and PostgreSQL to be running.
+The Expo app is a native shell around the same web application; server/API features still require the Node.js app and its configured database to be running.
 
 1. Start the web/API server in one terminal with `npm start`.
 2. Find the computer's LAN IP address (for example, `192.168.1.25`).
@@ -303,19 +304,21 @@ The complete template and comments are in `.env.example`.
 | Variable | Purpose |
 |---|---|
 | `NODE_ENV` | `development`, `test`, or `production` |
-| `PORT` | HTTP listen port; defaults to `3000` |
+| `PORT` | HTTP listen port; local development always uses `3000`; other environments default to `3000` and may override it |
 | `APP_URL` | Public app URL; use HTTPS in production |
 | `EXPO_PUBLIC_SERVER_URL` | Optional reachable server URL embedded into the Expo client |
 | `TRUST_PROXY` | Express trusted proxy hop count; set correctly behind Render, Railway, Fly, nginx, or another load balancer |
 | `JWT_SECRET` | Signs user/admin session tokens; private, random, at least 32 characters |
 | `JWT_EXPIRES_IN_DAYS` | User session duration |
 | `OTP_PEPPER` | Secret key for OTP hashing; private, at least 16 characters |
-| `DATABASE_URL` | PostgreSQL connection URL; keep private |
+| `DATABASE_MODE` | `pglite` (default outside production) or `postgres` (default in production) |
+| `PGLITE_DATA_DIR` | Persistent local embedded database directory; defaults to `./data/pglite` |
+| `DATABASE_URL` | PostgreSQL connection URL used when `DATABASE_MODE=postgres`; keep private |
 | `DATABASE_SSL` | Enable PostgreSQL TLS when required |
 | `DATABASE_SSL_VERIFY` | Verify the PostgreSQL TLS certificate; do not disable casually |
 | `DATABASE_POOL_SIZE` | Maximum PostgreSQL pool size |
 | `SQLITE_SOURCE_PATH` | Earlier SQLite database location for migration; defaults to `./data/agriconnect.db` |
-| `UPLOAD_DIR` | Legacy on-disk upload fallback; new listing images are stored in PostgreSQL |
+| `UPLOAD_DIR` | Legacy on-disk upload fallback; new listing images are stored in the configured database |
 | `MAX_IMAGES_PER_LISTING`, `MAX_IMAGE_MB` | Upload limits |
 | `OTP_LENGTH`, `OTP_TTL_SECONDS`, `OTP_MAX_ATTEMPTS`, `OTP_RESEND_COOLDOWN_SECONDS`, `OTP_MAX_PER_HOUR` | OTP policy and rate bounds |
 | `OTP_GLOBAL_MAX_PER_HOUR` | Global hourly cap on OTP SMS across all numbers (SMS-pumping circuit breaker; `0` disables) |
@@ -335,7 +338,7 @@ Production configuration rejects console OTP delivery and validates required sec
 
 ## Database and SQLite migration
 
-PostgreSQL is the current application database. Schema initialization is performed at startup. The primary tables are:
+Local development uses persistent embedded PGlite; production or `DATABASE_MODE=postgres` uses PostgreSQL. Schema initialization is performed at startup. The primary tables are:
 
 - `users`: farmer, owner, and admin accounts.
 - `otp_codes`: hashed, expiring, single-use verification challenges.
@@ -431,4 +434,4 @@ The Dockerfile packages the Node.js app and exposes port 3000. It does not start
 - Crop yields, rates, and revenue are indicative inputs/estimates. Confirm local prices, measurements, service availability, and provider details before making decisions.
 - The application opens near Hyderabad at `17.4576477, 78.3955979` when it has no usable saved/GPS location. Users must explicitly grant location permission for GPS features.
 - Map tile availability, zoom/detail, attribution, and terms are controlled by the configured external map tile providers. External Google Maps links do not provide Google tiles inside the application.
-- Keep the Node.js application and PostgreSQL service running for the local site to be available.
+- Keep the Node.js application running for the local site to be available; local development does not require a separate PostgreSQL service.

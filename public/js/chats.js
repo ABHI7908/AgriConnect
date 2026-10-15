@@ -89,6 +89,7 @@ if (!user || !['farmer', 'owner'].includes(user.role)) {
   let newChatTarget = null;
   let activeId = null;
   let loadingMessages = false;
+  let loadingChats = false;
   let lastMessageId = 0;
   let lastRenderedLanguage = language;
   let recorder = null;
@@ -198,21 +199,27 @@ if (!user || !['farmer', 'owner'].includes(user.role)) {
   }
 
   async function loadChats() {
-    const data = await api.get('/communications/chats');
-    if (!data.items.length) {
-      listHost.innerHTML = `<p class="chat-list-empty">${esc(text('No conversations yet. Open a listing to message a provider.'))}</p>`;
-      return;
+    if (loadingChats || document.hidden) return;
+    loadingChats = true;
+    try {
+      const data = await api.get('/communications/chats');
+      if (!data.items.length) {
+        listHost.innerHTML = `<p class="chat-list-empty">${esc(text('No conversations yet. Open a listing to message a provider.'))}</p>`;
+        return;
+      }
+      listHost.innerHTML = data.items.map((item) => `
+        <button class="chat-list-item ${String(item.id) === String(activeId) ? 'selected' : ''}"
+          type="button" data-chat-id="${esc(item.id)}">
+          <span class="chat-list-item-top"><strong>${esc(item.otherName)}</strong>
+            ${Number(item.unread_count) ? `<span class="chat-unread">${esc(item.unread_count)}</span>` : ''}
+          </span>
+          <span class="chat-list-listing">${esc(item.listing_title)} · ${esc(text(item.kind === 'tool' ? 'Machine' : 'Labour service'))}</span>
+          <span class="chat-list-preview">${esc(item.last_message || 'Conversation started')}</span>
+          <time>${esc(formatTime(item.last_message_at))}</time>
+        </button>`).join('');
+    } finally {
+      loadingChats = false;
     }
-    listHost.innerHTML = data.items.map((item) => `
-      <button class="chat-list-item ${String(item.id) === String(activeId) ? 'selected' : ''}"
-        type="button" data-chat-id="${esc(item.id)}">
-        <span class="chat-list-item-top"><strong>${esc(item.otherName)}</strong>
-          ${Number(item.unread_count) ? `<span class="chat-unread">${esc(item.unread_count)}</span>` : ''}
-        </span>
-        <span class="chat-list-listing">${esc(item.listing_title)} · ${esc(text(item.kind === 'tool' ? 'Machine' : 'Labour service'))}</span>
-        <span class="chat-list-preview">${esc(item.last_message || 'Conversation started')}</span>
-        <time>${esc(formatTime(item.last_message_at))}</time>
-      </button>`).join('');
   }
 
   async function openChat(id) {
@@ -433,7 +440,7 @@ if (!user || !['farmer', 'owner'].includes(user.role)) {
     refreshTimer = window.setInterval(() => {
       loadChats().catch((err) => console.error('Could not refresh chats:', err.message));
       loadMessages();
-    }, 5000);
+    }, 15000);
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) {
         loadChats().catch((err) => console.error('Could not refresh chats:', err.message));

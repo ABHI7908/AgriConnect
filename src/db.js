@@ -13,14 +13,17 @@ types.setTypeParser(types.builtins.INT8, (value) => {
 types.setTypeParser(1082, (value) => value);
 
 let pool;
-if (config.NODE_ENV === 'test') {
-  const testDatabase = import('@electric-sql/pglite').then(async ({ PGlite }) => {
-    const database = new PGlite({ parsers: { 1082: (value) => value } });
+if (config.DATABASE_MODE === 'pglite' || config.NODE_ENV === 'test') {
+  const embeddedDatabase = import('@electric-sql/pglite').then(async ({ PGlite }) => {
+    const database = new PGlite({
+      ...(config.NODE_ENV === 'test' ? {} : { dataDir: config.pgliteDataDir }),
+      parsers: { 1082: (value) => value },
+    });
     await database.waitReady;
     return database;
   });
   const client = async () => {
-    const database = await testDatabase;
+    const database = await embeddedDatabase;
     return {
       query: (sql, values) => database.query(sql, values),
       release() {},
@@ -29,7 +32,7 @@ if (config.NODE_ENV === 'test') {
   pool = {
     connect: client,
     query: async (sql, values) => (await client()).query(sql, values),
-    end: async () => (await testDatabase).close(),
+    end: async () => (await embeddedDatabase).close(),
     on() {},
   };
 } else {

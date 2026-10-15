@@ -2,6 +2,8 @@
 node_modules/
 .expo/
 data/*.db*
+data/pglite/
+data/backups/
 uploads/*
 !uploads/.gitkeep
 *.log

@@ -17,13 +17,16 @@ const loginKey = (identifierField) => (req) => {
   const identifier = String(req.body?.[identifierField] || '').trim().toLowerCase();
   return `${ipKeyGenerator(req.ip)}:${identifier}`;
 };
+const apiKey = (req) => (req.user ? `user:${req.user.id}` : `ip:${ipKeyGenerator(req.ip)}`);
 
 module.exports = {
   // Authentication has dedicated, narrower limiters below. Exclude it from the
   // general API budget so normal page polling cannot prevent a user from signing in.
-  api: make(15 * MIN, 600, 'Too many requests. Please slow down.', {
+  api: make(15 * MIN, 1200, 'Too many requests. Please slow down.', {
     skip: (req) => req.path === '/auth' || req.path.startsWith('/auth/'),
+    keyGenerator: apiKey,
   }),
+  apiKey,
   otpRequest: make(15 * MIN, 12, 'Too many OTP requests from this network. Please try again later.'),
   otpVerify: make(15 * MIN, 40, 'Too many verification attempts. Please try again later.'),
   adminLogin: make(15 * MIN, 10, 'Too many login attempts for this account from this network. Please try again later.', {

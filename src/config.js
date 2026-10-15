@@ -20,10 +20,12 @@ const schema = z.object({
   OTP_PEPPER: z.string().min(16, 'OTP_PEPPER must be at least 16 characters'),
   JWT_EXPIRES_IN_DAYS: z.coerce.number().int().min(1).max(60).default(7),
 
-  DATABASE_URL: z.string().url('DATABASE_URL must be a PostgreSQL connection URL'),
+  DATABASE_URL: z.string().url('DATABASE_URL must be a PostgreSQL connection URL').optional(),
+  DATABASE_MODE: z.enum(['postgres', 'pglite']).default(process.env.NODE_ENV === 'production' ? 'postgres' : 'pglite'),
   DATABASE_SSL: bool(false),
   DATABASE_SSL_VERIFY: bool(true),
   DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(50).default(10),
+  PGLITE_DATA_DIR: z.string().default('./data/pglite'),
   SQLITE_SOURCE_PATH: z.string().optional().default('./data/agriconnect.db'),
   UPLOAD_DIR: z.string().default('./uploads'),
   MAX_IMAGES_PER_LISTING: z.coerce.number().int().min(1).max(20).default(6),
@@ -78,6 +80,18 @@ if (!parsed.success) {
 
 const env = parsed.data;
 const isProd = env.NODE_ENV === 'production';
+if (env.DATABASE_MODE === 'postgres' && !env.DATABASE_URL) {
+  // eslint-disable-next-line no-console
+  console.error('DATABASE_URL is required when DATABASE_MODE=postgres.');
+  process.exit(1);
+}
+if (isProd && env.DATABASE_MODE !== 'postgres') {
+  // eslint-disable-next-line no-console
+  console.error('DATABASE_MODE=pglite is for local development only. Set DATABASE_MODE=postgres in production.');
+  process.exit(1);
+}
+const port = env.NODE_ENV === 'development' ? 3000 : env.PORT;
+const appUrl = env.NODE_ENV === 'development' ? 'http://localhost:3000' : env.APP_URL;
 const dbManagerEnabled =
   env.DB_MANAGER_ENABLED === undefined || env.DB_MANAGER_ENABLED === ''
     ? !isProd
@@ -126,11 +140,15 @@ const root = path.resolve(__dirname, '..');
 
 module.exports = Object.freeze({
   ...env,
+  DATABASE_URL: env.DATABASE_URL || '',
+  PORT: port,
+  APP_URL: appUrl,
   isProd,
   dbManagerEnabled,
   dbManagerAllowedIps,
   root,
   sqliteSourcePath: path.resolve(root, env.SQLITE_SOURCE_PATH),
+  pgliteDataDir: path.resolve(root, env.PGLITE_DATA_DIR),
   uploadDir: path.resolve(root, env.UPLOAD_DIR),
   publicDir: path.join(root, 'public'),
   maxImageBytes: Math.round(env.MAX_IMAGE_MB * 1024 * 1024),

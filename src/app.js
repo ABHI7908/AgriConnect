@@ -123,10 +123,10 @@ app.use('/api', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
 });
-app.use('/api', limits.api);
 app.use('/api', express.json({ limit: '100kb' }));
 app.use('/api', cookieParser());
 app.use('/api', loadUser);
+app.use('/api', limits.api);
 app.use('/api', csrfGuard);
 
 app.get('/api/meta', (req, res) => {

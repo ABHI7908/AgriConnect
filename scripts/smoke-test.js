@@ -39,6 +39,7 @@ const realLog = console.log;
 console.log = (...a) => { if (!String(a[0]).startsWith('[sms:console]')) realLog(...a); };
 
 const db = require('../src/db');
+const { apiKey } = require('../src/middleware/rateLimit');
 const { bootstrap } = require('../src/services/bootstrap');
 const storage = require('../src/services/storage');
 const app = require('../src/app');
@@ -152,6 +153,14 @@ async function main() {
   check('state-changing request without CSRF header is rejected', noCsrf.status === 403);
   check('security headers present', !!health.headers.get('content-security-policy') && health.headers.get('x-powered-by') === null);
   check('street and satellite tile origins are permitted by the content security policy', /tile\.openstreetmap\.org/.test(health.headers.get('content-security-policy') || '') && /arcgisonline\.com/.test(health.headers.get('content-security-policy') || ''));
+  check(
+    'API rate limits are isolated per authenticated user',
+    apiKey({ user: { id: 1 }, ip: '127.0.0.1' }) !== apiKey({ user: { id: 2 }, ip: '127.0.0.1' })
+  );
+  check(
+    'anonymous API rate limits remain scoped to the client IP',
+    apiKey({ ip: '127.0.0.1' }) === apiKey({ ip: '127.0.0.1' })
+  );
 
   realLog('\nRegistration and sign-in (owner)');
   const badPhone = await anon.post('/api/auth/otp/request', { phone: '12345', role: 'owner' });

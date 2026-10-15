@@ -13,7 +13,7 @@ async function start() {
   await bootstrap();
   server = app.listen(config.PORT, () => {
     // eslint-disable-next-line no-console
-    console.log(`AgriConnect listening on ${config.APP_URL.replace(/\/$/, '')} (port ${config.PORT}, ${config.NODE_ENV})`);
+    console.log(`AgriConnect listening on ${config.APP_URL.replace(/\/$/, '')} (port ${config.PORT}, ${config.NODE_ENV}, ${config.DATABASE_MODE})`);
     if (config.SMS_PROVIDER === 'console') {
       // eslint-disable-next-line no-console
       console.log('SMS_PROVIDER=console: OTPs are printed in this log. Configure Twilio or MSG91 before going live.');

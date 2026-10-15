@@ -33,7 +33,7 @@ async function request(method, url, { json, form, query } = {}) {
   try {
     res = await fetch(`/api${url}${buildQuery(query)}`, { method, headers, body, credentials: 'same-origin' });
   } catch (_) {
-    throw new ApiError(0, 'NETWORK', 'No internet connection. Check your network and try again.');
+    throw new ApiError(0, 'NETWORK', 'Could not connect to the AgriConnect server. Check that it is running, then try again.');
   }
 
   let data = null;
