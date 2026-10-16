@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "{public/**,node_modules/leaflet/dist/**}"
+    }
+  },
+  "routes": [
+    {
+      "src": "/(?<path>.*)",
+      "dest": "/api",
+      "transforms": [
+        {
+          "type": "request.path",
+          "op": "set",
+          "args": "/$path"
+        }
+      ]
+    }
+  ]
+}

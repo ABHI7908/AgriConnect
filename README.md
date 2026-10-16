@@ -159,9 +159,11 @@ Maps do not require a Google Maps API key. The application can open coordinates 
 ```text
 .
 ├── App.js                         # Expo React Native WebView shell and native GPS bridge
+├── api/index.js                   # Vercel Node.js Function entry point
 ├── app.json                       # Expo app identity, platform location permissions
 ├── Dockerfile                     # Production Node.js application image
 ├── package.json                   # Commands and dependency manifest
+├── vercel.json                    # Routes web, assets, and API requests through Express
 ├── .env.example                   # Configuration template; copy to the ignored .env
 ├── public/
 │   ├── index.html                 # Marketplace/search page
@@ -432,6 +434,12 @@ Tests use an isolated PGlite database when `NODE_ENV=test`; they should not chan
 8. For multiple application instances, use a shared PostgreSQL service and shared image/object storage (for example, S3-compatible storage); the current image implementation stores bytes in PostgreSQL.
 
 The Dockerfile packages the Node.js app and exposes port 3000. It does not start PostgreSQL; connect it to a separately provisioned PostgreSQL service and provide configuration through the deployment platform's secret/environment settings.
+
+### Vercel
+
+The web app and API are deployed together through `api/index.js`; `vercel.json` sends requests to the Express app, including its `public/` assets and locally served Leaflet files. In Vercel, use the repository root, Node.js 24, and no separate frontend build or output directory. The function runs the application bootstrap on its first request in each instance. The Expo mobile shell is not part of this web deployment and should be built separately with Expo Application Services.
+
+Configure `NODE_ENV=production`, `DATABASE_MODE=postgres`, `DATABASE_URL`, `JWT_SECRET`, `OTP_PEPPER`, `TRUST_PROXY=1`, and a production SMS provider with its credentials in Vercel Environment Variables. Set `APP_URL` to the deployed HTTPS origin and `DATABASE_SSL`/`DATABASE_SSL_VERIFY` as required by the PostgreSQL provider. Use a PostgreSQL connection pooler where available; the default connection pool is reduced to two per Vercel function instance. Vercel uses `/tmp` for the legacy upload fallback; listing photo bytes are stored in PostgreSQL. Vercel limits function request bodies to about 4.5 MB, so the Vercel default allows up to 0.5 MB per image (six images fit within one request). Larger upload support requires direct-to-object-storage uploads or a backend host with a higher request-body limit.
 
 ## Limitations and operational notes
 
