@@ -26,7 +26,8 @@
     "jsonwebtoken": "^9.0.3",
     "leaflet": "^1.9.4",
     "morgan": "^1.12.1",
-    "multer": "^2.4.0",
+    
+    
     "pg": "^8.23.1",
     "react": "19.2.3",
     "react-native": "0.86.3",
@@ -35,7 +36,7 @@
   },
   "private": true,
   "engines": {
-    "node": "24.18.0"
+    "node": "24.x"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
@@ -43,6 +44,7 @@
     "better-sqlite3": "^13.0.3"
   },
   "allowScripts": {
+
     "better-sqlite3@13.0.3": true
   }
 }

@@ -12,3 +12,6 @@ data/logs/
 uploads/*
 !uploads/.gitkeep
 *.log
+
+.vercel
+.env*
